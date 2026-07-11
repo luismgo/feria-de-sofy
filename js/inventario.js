@@ -37,7 +37,19 @@ async function render(feria, container) {
     </section>
 
     <section class="inv-section" id="inv-productos-section">
-      <p>La sección de Productos se agrega en la Tarea 9.</p>
+      <h2>Productos</h2>
+      <div id="inv-productos" class="inv-list"></div>
+      <form id="form-producto" class="inv-form">
+        <input name="nombre" placeholder="Nombre del producto" required />
+        <select name="categoria_precio_id">
+          <option value="">Sin categoría</option>
+          ${categorias.map((c) => `<option value="${c.id}">${c.nombre} ($${c.precio})</option>`).join('')}
+        </select>
+        <input name="stock" type="number" min="0" placeholder="Stock inicial" required />
+        <input name="foto" type="file" accept="image/*" />
+        <button type="submit">Agregar producto</button>
+      </form>
+      <button id="btn-reutilizar" class="btn btn--secondary" type="button">↩️ Reutilizar producto de otra feria</button>
     </section>
   `;
 
@@ -67,6 +79,56 @@ async function render(feria, container) {
     });
     render(feria, container);
   });
+
+  const { data: productos } = await supabase
+    .from('feria_productos')
+    .select('id, categoria_precio_id, precio_override, productos(id, nombre, imagen_url, stock)')
+    .eq('feria_id', feria.id);
+
+  renderProductos(feria, productos || [], categorias, container);
+
+  container.querySelector('#form-producto').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const submitBtn = form.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Guardando...';
+
+    let imagen_url = null;
+    const file = form.foto.files[0];
+    if (file) {
+      const path = `${crypto.randomUUID()}-${file.name}`;
+      const { error: uploadError } = await supabase.storage.from('productos-fotos').upload(path, file);
+      if (!uploadError) {
+        imagen_url = supabase.storage.from('productos-fotos').getPublicUrl(path).data.publicUrl;
+      } else {
+        toast('No se pudo subir la foto, se guarda el producto sin foto');
+      }
+    }
+
+    const { data: producto, error: prodError } = await supabase
+      .from('productos')
+      .insert({ nombre: form.nombre.value.trim(), stock: Number(form.stock.value), imagen_url })
+      .select()
+      .single();
+
+    if (prodError) {
+      toast('No se pudo crear el producto');
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Agregar producto';
+      return;
+    }
+
+    await supabase.from('feria_productos').insert({
+      feria_id: feria.id,
+      producto_id: producto.id,
+      categoria_precio_id: form.categoria_precio_id.value || null,
+    });
+
+    render(feria, container);
+  });
+
+  container.querySelector('#btn-reutilizar').addEventListener('click', () => abrirReutilizarModal(feria, categorias, container));
 }
 
 function renderCategorias(feria, categorias, container) {
@@ -112,5 +174,119 @@ function renderCombos(feria, combos, container) {
       await supabase.from('combos').delete().eq('id', btn.dataset.id);
       render(feria, container);
     });
+  });
+}
+
+function renderProductos(feria, feriaProductos, categorias, container) {
+  const list = container.querySelector('#inv-productos');
+  list.innerHTML = feriaProductos.map((fp) => {
+    const p = fp.productos;
+    const categoria = categorias.find((c) => c.id === fp.categoria_precio_id);
+    const precioTexto = fp.precio_override != null
+      ? `$${fp.precio_override} (override)`
+      : categoria ? `$${categoria.precio} (${categoria.nombre})` : 'sin precio';
+    return `
+      <div class="inv-row" data-id="${fp.id}">
+        ${p.imagen_url ? `<img class="inv-row__foto" src="${p.imagen_url}" alt="${p.nombre}" />` : ''}
+        <span>${p.nombre} — ${precioTexto} — Stock: ${p.stock}</span>
+        <input type="number" class="inv-stock-input" data-producto-id="${p.id}" value="${p.stock}" min="0" />
+        <select class="inv-categoria-select" data-id="${fp.id}">
+          <option value="">Sin categoría</option>
+          ${categorias.map((c) => `<option value="${c.id}" ${fp.categoria_precio_id === c.id ? 'selected' : ''}>${c.nombre}</option>`).join('')}
+        </select>
+        <button class="btn-icon" data-action="quitar-de-feria" data-id="${fp.id}">➖</button>
+        <button class="btn-icon" data-action="eliminar-producto" data-producto-id="${p.id}">🗑️</button>
+      </div>
+    `;
+  }).join('') || '<p class="inv-empty">Todavía no hay productos en esta feria</p>';
+
+  list.querySelectorAll('.inv-stock-input').forEach((input) => {
+    input.addEventListener('change', async () => {
+      await supabase.from('productos').update({ stock: Number(input.value) }).eq('id', input.dataset.productoId);
+    });
+  });
+
+  list.querySelectorAll('.inv-categoria-select').forEach((select) => {
+    select.addEventListener('change', async () => {
+      await supabase.from('feria_productos').update({ categoria_precio_id: select.value || null }).eq('id', select.dataset.id);
+    });
+  });
+
+  list.querySelectorAll('[data-action="quitar-de-feria"]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const ok = await confirmDialog('¿Quitar este producto de esta feria? Sigue existiendo para otras ferias que lo usen.');
+      if (!ok) return;
+      await supabase.from('feria_productos').delete().eq('id', btn.dataset.id);
+      render(feria, container);
+    });
+  });
+
+  list.querySelectorAll('[data-action="eliminar-producto"]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const ok = await confirmDialog('¿Eliminar este producto por completo, de TODAS las ferias que lo usan? Las ventas ya registradas se conservan.');
+      if (!ok) return;
+      await supabase.from('productos').delete().eq('id', btn.dataset.productoId);
+      render(feria, container);
+    });
+  });
+}
+
+async function abrirReutilizarModal(feriaActual, categoriasActuales, container) {
+  const { data: otrasFerias } = await supabase.from('ferias').select('*').neq('id', feriaActual.id).order('nombre');
+  if (!otrasFerias || otrasFerias.length === 0) {
+    toast('No hay otra feria de la cual reutilizar productos todavía');
+    return;
+  }
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal">
+      <p>Elegí de cuál feria traer productos:</p>
+      <select id="reutilizar-feria-select">
+        ${otrasFerias.map((f) => `<option value="${f.id}">${f.emoji} ${f.nombre}</option>`).join('')}
+      </select>
+      <div id="reutilizar-productos-list" class="inv-list"></div>
+      <div class="modal-actions">
+        <button class="btn btn--secondary" data-action="cerrar">Cerrar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  async function cargarProductosDeFeria(feriaId) {
+    const { data: yaEnEstaFeria } = await supabase.from('feria_productos').select('producto_id').eq('feria_id', feriaActual.id);
+    const idsYaVinculados = new Set((yaEnEstaFeria || []).map((r) => r.producto_id));
+
+    const { data: fps } = await supabase
+      .from('feria_productos')
+      .select('producto_id, productos(id, nombre, imagen_url, stock)')
+      .eq('feria_id', feriaId);
+
+    const disponibles = (fps || []).filter((fp) => !idsYaVinculados.has(fp.producto_id));
+    const list = overlay.querySelector('#reutilizar-productos-list');
+    list.innerHTML = disponibles.map((fp) => `
+      <div class="inv-row">
+        <span>${fp.productos.nombre} (stock: ${fp.productos.stock})</span>
+        <button class="btn-icon" data-action="agregar-producto" data-id="${fp.productos.id}">➕</button>
+      </div>
+    `).join('') || '<p class="inv-empty">No hay productos nuevos para traer de esa feria</p>';
+
+    list.querySelectorAll('[data-action="agregar-producto"]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        await supabase.from('feria_productos').insert({ feria_id: feriaActual.id, producto_id: btn.dataset.id });
+        toast('Producto agregado a esta feria');
+        document.body.removeChild(overlay);
+        render(feriaActual, container);
+      });
+    });
+  }
+
+  const select = overlay.querySelector('#reutilizar-feria-select');
+  select.addEventListener('change', () => cargarProductosDeFeria(select.value));
+  await cargarProductosDeFeria(select.value);
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target.dataset.action === 'cerrar') document.body.removeChild(overlay);
   });
 }
