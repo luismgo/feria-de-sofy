@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient.js';
-import { toast } from './ui.js';
+import { confirmDialog, toast } from './ui.js';
 
 let realtimeChannel = null;
 let carrito = []; // { tipo: 'producto', productoId, nombre, precio, cantidad } | { tipo: 'combo', comboId, nombre, precio, productos: [{id, nombre}] }
@@ -144,6 +144,34 @@ function renderCarrito(feria, container) {
   panel.querySelector('#btn-vaciar-carrito').addEventListener('click', () => {
     carrito = [];
     refrescarCarrito(feria, container);
+  });
+
+  panel.querySelector('#btn-confirmar-venta').addEventListener('click', async () => {
+    if (!navigator.onLine) {
+      toast('Sin conexión — no se puede confirmar la venta ahora');
+      return;
+    }
+
+    const total = carrito.reduce((sum, l) => sum + l.precio * (l.tipo === 'producto' ? l.cantidad : 1), 0);
+    const ok = await confirmDialog(`¿Confirmar venta por un total de $${total}?`);
+    if (!ok) return;
+
+    const items = carrito.map((l) => l.tipo === 'producto'
+      ? { tipo: 'producto', producto_id: l.productoId, cantidad: l.cantidad }
+      : { tipo: 'combo', combo_id: l.comboId, producto_ids: l.productos.map((p) => p.id) }
+    );
+
+    const { data, error } = await supabase.rpc('confirmar_venta', { p_feria_id: feria.id, p_items: items });
+
+    if (error) {
+      toast(`No se pudo confirmar la venta: ${error.message}`);
+      return;
+    }
+
+    carrito = [];
+    if (window.confetti) window.confetti({ particleCount: 120, spread: 80, origin: { y: 0.7 } });
+    toast(`¡Venta registrada! 🎉 Total: $${data[0].total}`);
+    loadAndRender(feria, container);
   });
 
   return panel;
