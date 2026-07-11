@@ -79,3 +79,12 @@ body {
   font-size: 1.2rem;
 }
 .feria-card__emoji { font-size: 2rem; }
+
+.feria-header { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.tabs { display: flex; gap: 4px; margin-bottom: 16px; overflow-x: auto; }
+.tab-btn {
+  background: white; color: var(--text); box-shadow: none;
+  border-radius: var(--radius) var(--radius) 0 0; opacity: 0.6;
+}
+.tab-btn.active { opacity: 1; background: var(--accent); color: white; }
+.tab-panel { padding: 16px 0; }
