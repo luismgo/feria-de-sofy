@@ -2381,7 +2381,11 @@ async function main() {
     if (!nombre) continue;
 
     let imagenUrl = null;
-    const imagen = images.find((img) => img.range.tl.row <= rowNumber - 1 && img.range.br.row >= rowNumber - 1);
+    const imagen = images.find((img) => {
+      const filaSuperior = img.range.tl.row;
+      const filaInferior = img.range.br ? img.range.br.row : filaSuperior;
+      return filaSuperior <= rowNumber - 1 && filaInferior >= rowNumber - 1;
+    });
     if (imagen) {
       const img = workbook.getImage(imagen.imageId);
       const fileName = `${randomUUID()}.${img.extension}`;
