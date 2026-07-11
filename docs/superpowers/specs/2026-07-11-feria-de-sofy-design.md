@@ -11,8 +11,9 @@ recurrentes:
 Cada feria tiene su propio inventario, se puede vender en vivo desde el celular
 durante el evento con sincronización en tiempo real entre varios dispositivos
 (ej. Sofy y quien la ayude cobrando en paralelo), y hay un espacio de notas
-para ideas de producto, logística y precios/promos. Acceso protegido con un
-PIN de 4 dígitos.
+para ideas de producto, logística y precios/promos. Acceso restringido a una
+lista cerrada de correos (Sofy y quien la ayude) vía inicio de sesión con
+link mágico por correo (Supabase Auth).
 
 ## Alcance
 
@@ -30,13 +31,18 @@ PIN de 4 dígitos.
 - Historial de ventas agrupado por fecha (total vendido, # de ventas, "hoy" destacado)
 - Notas/ideas por feria, categorizadas (producto / logística / precio-promo),
   con checkbox de "hecho"
-- Pantalla de PIN de 4 dígitos como filtro de acceso
+- Login con link mágico por correo (Supabase Auth), restringido a una
+  whitelist de correos invitados manualmente
 - Import inicial (una vez, vía script) del inventario real de stickers ya
   existente (53 diseños con foto, nombre y cantidad) desde
   `insumos/Inventario stickers.xlsx`
 
 **No incluye (fuera de alcance, YAGNI):**
-- Autenticación real de usuarios (login individual, roles, permisos)
+- Roles o permisos diferenciados entre usuarios invitados (todo usuario
+  autenticado tiene acceso completo a ambas ferias, no hay distinción
+  admin/colaborador)
+- Interfaz para gestionar la whitelist (invitar/quitar correos se hace desde
+  el dashboard de Supabase, no desde la app)
 - Modo offline-first completo (se asume wifi/datos disponibles en ambas ferias)
 - Tests automatizados
 - Variantes de un mismo producto por talla/color/sabor dentro de un solo
@@ -53,8 +59,9 @@ PIN de 4 dígitos.
 - **Backend**: Supabase (proyecto nuevo, separado de otros proyectos del
   usuario) — Postgres + Realtime, accedido vía `@supabase/supabase-js` por CDN.
 - **Hosting**: GitHub Pages, deploy vía `git push` a la rama de Pages.
-- **Persistencia local**: `localStorage` solo para recordar que el PIN ya fue
-  ingresado correctamente en ese dispositivo (no vuelve a pedirlo cada vez).
+- **Autenticación**: Supabase Auth con link mágico por correo (passwordless).
+  La sesión la persiste automáticamente el cliente de `supabase-js` (no hace
+  falta manejar `localStorage` a mano).
 
 ### Por qué Supabase sobre alternativas
 
@@ -69,21 +76,32 @@ Se decidió un **proyecto Supabase nuevo y separado** (no reutilizar el de
 `finanzas-pwa`) para mantener los datos de la feria completamente aislados de
 las finanzas personales del usuario.
 
-### Nota de seguridad (trade-off aceptado)
+### Autenticación y whitelist
 
-La app usa la anon key pública de Supabase desde el cliente. El PIN de 4
-dígitos protege la *interfaz* de la app (evita que alguien casual con el link
-entre y edite datos), pero no es una barrera criptográfica a nivel de red:
-alguien con conocimientos técnicos que inspeccione el tráfico podría
-potencialmente interactuar con la base de datos directamente. Dado que los
-datos son de bajo riesgo (inventario de stickers/postres, no información
-personal sensible) y el link no se comparte públicamente, este nivel de
-protección es un trade-off aceptado explícitamente en vez de construir
-autenticación real.
+Se usa Supabase Auth con **link mágico por correo** (`signInWithOtp`, sin
+contraseña) en vez del PIN considerado originalmente — es una barrera real a
+nivel de base de datos, no solo de interfaz, y no cuesta más esfuerzo de
+implementar.
 
-Row Level Security (RLS) se habilita en Supabase con políticas simples que
-permiten lectura/escritura a la anon key (en vez de deshabilitar RLS por
-completo), como mínima buena práctica.
+La whitelist se logra sin tabla propia, con configuración de Supabase:
+
+1. En el dashboard, **Authentication → deshabilitar "Allow new users to
+   sign up"** (nadie se puede registrar solo).
+2. **Invitar manualmente** el correo de Sofy (y de quien la ayude) desde
+   Authentication → Users → Invite user. Solo esos correos existen como
+   usuarios.
+3. El login se pide con `signInWithOtp({ email, options: { shouldCreateUser:
+   false } })` — con signups deshabilitados y `shouldCreateUser: false`, un
+   correo no invitado nunca puede entrar, invitado o no.
+4. Row Level Security en todas las tablas usa políticas `to authenticated`
+   (en vez de abiertas a la anon key): solo alguien con sesión iniciada
+   (correo invitado que ya clickeó su link mágico) puede leer o escribir
+   datos. Esto cierra a nivel de red el hueco que un PIN puramente de
+   interfaz habría dejado abierto.
+
+Agregar o quitar gente de la whitelist es una acción manual en el dashboard
+de Supabase (invitar / eliminar usuario), no algo que la app exponga en su
+interfaz — no hace falta para 1-2 personas.
 
 ## Modelo de datos (tablas Supabase / Postgres)
 
@@ -142,11 +160,10 @@ notas
   texto         text
   hecho         boolean default false
   created_at    timestamptz
-
-config
-  clave         text (pk)       -- 'pin'
-  valor         text            -- "1234"
 ```
+
+No hay tabla propia para autenticación/whitelist — la maneja Supabase Auth
+(usuarios invitados manualmente, ver sección de Autenticación arriba).
 
 Precio efectivo de un producto = `precio_override` si está seteado, si no el
 `precio` de su `categorias_precio`. La mayoría de los productos solo usan la
@@ -168,9 +185,13 @@ corresponde a un stock real que se repone.
 
 ## Pantallas y flujo
 
-1. **PIN gate** — pantalla rosa de bienvenida con input de 4 dígitos. Valida
-   contra `config` en Supabase. Si es correcto, guarda flag en `localStorage`
-   y no se vuelve a pedir en ese dispositivo.
+1. **Login** — pantalla rosa de bienvenida con input de correo. Al enviar,
+   pide un link mágico vía `supabase.auth.signInWithOtp`. Si el correo está
+   invitado, llega un mail con el link; al clickearlo, vuelve a la app ya
+   con sesión iniciada (el cliente de `supabase-js` detecta la sesión de la
+   URL de redirección automáticamente). Si no está invitado, no puede
+   entrar. La sesión persiste sola entre visitas — no hay que loguearse cada
+   vez.
 2. **Selector de feria** — dos tarjetas grandes (una por feria) para elegir en
    cuál trabajar. Accesible en cualquier momento vía botón "cambiar feria".
 3. **Vista de feria**, con navegación por pestañas (mobile-first, tabs abajo):
@@ -215,8 +236,10 @@ corresponde a un stock real que se repone.
 - **Sin conexión**: banner visible de "sin conexión", pestaña "Vender" se
   deshabilita temporalmente para evitar ventas que no lleguen a guardarse
   (ventas fantasma). Se reactiva automáticamente al reconectar.
-- **PIN incorrecto**: mensaje de error simple, sin límite de intentos (no es
-  un requisito de seguridad crítica).
+- **Correo no invitado**: `signInWithOtp` devuelve error (con signups
+  deshabilitados y `shouldCreateUser: false`) y la app lo muestra como
+  mensaje simple, sin revelar si el correo existe o no como norma general de
+  buena práctica, aunque para 1-2 usuarios esto no es crítico.
 - **Producto eliminado con ventas previas**: las filas de `ventas` y
   `venta_items` conservan su propio `nombre`/`producto_nombre` y `precio`
   (snapshot), así que el historial se mantiene íntegro aunque el producto ya
