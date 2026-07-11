@@ -1,0 +1,123 @@
+import { supabase } from './supabaseClient.js';
+import { confirmDialog } from './ui.js';
+
+export async function fetchInsumos() {
+  const { data } = await supabase.from('insumos').select('*').order('nombre');
+  return data || [];
+}
+
+export async function renderInsumosSection(container) {
+  const insumos = await fetchInsumos();
+
+  container.innerHTML = `
+    <h2>Insumos</h2>
+    <p class="inv-hint">Empaques y materiales que se descuentan solos al vender, sin venderse ellos mismos (ej. bolsitas).</p>
+    <div id="inv-insumos" class="inv-list"></div>
+    <form id="form-insumo" class="inv-form">
+      <input name="nombre" placeholder="Nombre (ej: Bolsita transparente)" required />
+      <input name="stock" type="number" min="0" placeholder="Stock inicial" required />
+      <button type="submit">Agregar insumo</button>
+    </form>
+  `;
+
+  const list = container.querySelector('#inv-insumos');
+  list.innerHTML = insumos.map((i) => `
+    <div class="inv-row" data-id="${i.id}">
+      <span>${i.nombre}</span>
+      <input type="number" class="insumo-stock-input" data-id="${i.id}" value="${i.stock}" min="0" />
+      <button class="btn-icon" data-action="eliminar-insumo" data-id="${i.id}">🗑️</button>
+    </div>
+  `).join('') || '<p class="inv-empty">Todavía no hay insumos</p>';
+
+  list.querySelectorAll('.insumo-stock-input').forEach((input) => {
+    input.addEventListener('change', async () => {
+      await supabase.from('insumos').update({ stock: Number(input.value) }).eq('id', input.dataset.id);
+    });
+  });
+
+  list.querySelectorAll('[data-action="eliminar-insumo"]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const ok = await confirmDialog('¿Eliminar este insumo? Se quita también de la receta de los productos que lo usaban.');
+      if (!ok) return;
+      await supabase.from('insumos').delete().eq('id', btn.dataset.id);
+      renderInsumosSection(container);
+    });
+  });
+
+  container.querySelector('#form-insumo').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    await supabase.from('insumos').insert({ nombre: form.nombre.value.trim(), stock: Number(form.stock.value) });
+    renderInsumosSection(container);
+  });
+}
+
+export async function abrirRecetaModal(producto) {
+  const insumos = await fetchInsumos();
+  const { data: receta } = await supabase.from('producto_insumos').select('*').eq('producto_id', producto.id);
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+
+  function render() {
+    overlay.innerHTML = `
+      <div class="modal">
+        <p>Receta de "${producto.nombre}" — qué insumos consume por unidad vendida</p>
+        <div id="receta-list" class="inv-list">
+          ${receta.map((r) => {
+            const insumo = insumos.find((i) => i.id === r.insumo_id);
+            return `
+              <div class="inv-row">
+                <span>${insumo ? insumo.nombre : '(insumo eliminado)'} x ${r.cantidad}</span>
+                <button class="btn-icon" data-action="quitar-receta" data-id="${r.id}">🗑️</button>
+              </div>
+            `;
+          }).join('') || '<p class="inv-empty">Sin insumos asignados todavía</p>'}
+        </div>
+        <form id="form-agregar-receta" class="inv-form">
+          <select name="insumo_id">
+            ${insumos.map((i) => `<option value="${i.id}">${i.nombre}</option>`).join('')}
+          </select>
+          <input name="cantidad" type="number" min="1" value="1" placeholder="Cantidad" required />
+          <button type="submit">Agregar a la receta</button>
+        </form>
+        <div class="modal-actions">
+          <button class="btn btn--secondary" data-action="cerrar">Cerrar</button>
+        </div>
+      </div>
+    `;
+  }
+
+  render();
+  document.body.appendChild(overlay);
+
+  // Delegación en `overlay` (no en los elementos internos): el modal
+  // reconstruye su innerHTML en cada render(), así que un listener puesto
+  // directamente en el <form> quedaría huérfano después del primer cambio.
+  overlay.addEventListener('click', async (e) => {
+    if (e.target.dataset.action === 'cerrar') {
+      document.body.removeChild(overlay);
+      return;
+    }
+    if (e.target.dataset.action === 'quitar-receta') {
+      await supabase.from('producto_insumos').delete().eq('id', e.target.dataset.id);
+      const idx = receta.findIndex((r) => r.id === e.target.dataset.id);
+      if (idx >= 0) receta.splice(idx, 1);
+      render();
+    }
+  });
+
+  overlay.addEventListener('submit', async (e) => {
+    if (e.target.id !== 'form-agregar-receta') return;
+    e.preventDefault();
+    const form = e.target;
+    const { data: nueva } = await supabase.from('producto_insumos').upsert({
+      producto_id: producto.id,
+      insumo_id: form.insumo_id.value,
+      cantidad: Number(form.cantidad.value),
+    }, { onConflict: 'producto_id,insumo_id' }).select().single();
+    const idx = receta.findIndex((r) => r.insumo_id === form.insumo_id.value);
+    if (idx >= 0) receta[idx] = nueva; else receta.push(nueva);
+    render();
+  });
+}

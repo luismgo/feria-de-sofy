@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient.js';
 import { confirmDialog, toast } from './ui.js';
+import { renderInsumosSection, abrirRecetaModal } from './insumos.js';
 
 export function initInventario(feria) {
   const container = document.getElementById('tab-inventario');
@@ -51,6 +52,8 @@ async function render(feria, container) {
       </form>
       <button id="btn-reutilizar" class="btn btn--secondary" type="button">↩️ Reutilizar producto de otra feria</button>
     </section>
+
+    <section class="inv-section" id="inv-insumos-section"></section>
   `;
 
   renderCategorias(feria, categorias, container);
@@ -86,6 +89,8 @@ async function render(feria, container) {
     .eq('feria_id', feria.id);
 
   renderProductos(feria, productos || [], categorias, container);
+
+  renderInsumosSection(container.querySelector('#inv-insumos-section'));
 
   container.querySelector('#form-producto').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -201,6 +206,7 @@ function renderProductos(feria, feriaProductos, categorias, container) {
           <option value="">Sin categoría</option>
           ${categorias.map((c) => `<option value="${c.id}" ${fp.categoria_precio_id === c.id ? 'selected' : ''}>${c.nombre}</option>`).join('')}
         </select>
+        <button class="btn-icon" data-action="ver-receta" data-producto-id="${p.id}" data-producto-nombre="${p.nombre}">🧪</button>
         <button class="btn-icon" data-action="quitar-de-feria" data-id="${fp.id}">➖</button>
         <button class="btn-icon" data-action="eliminar-producto" data-producto-id="${p.id}">🗑️</button>
       </div>
@@ -218,6 +224,12 @@ function renderProductos(feria, feriaProductos, categorias, container) {
     select.addEventListener('change', async () => {
       await supabase.from('feria_productos').update({ categoria_precio_id: select.value || null }).eq('id', select.dataset.id);
       render(feria, container);
+    });
+  });
+
+  list.querySelectorAll('[data-action="ver-receta"]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      abrirRecetaModal({ id: btn.dataset.productoId, nombre: btn.dataset.productoNombre });
     });
   });
 
