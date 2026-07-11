@@ -242,6 +242,8 @@ declare
   v_insumo record;
   v_cantidad integer;
 begin
+  insert into ventas (id, feria_id, total) values (v_venta_id, p_feria_id, 0);
+
   for v_item in select * from jsonb_array_elements(p_items)
   loop
     if v_item->>'tipo' = 'producto' then
@@ -334,7 +336,7 @@ begin
     end if;
   end loop;
 
-  insert into ventas (id, feria_id, total) values (v_venta_id, p_feria_id, v_total);
+  update ventas set total = v_total where id = v_venta_id;
 
   return query select v_venta_id, v_total;
 end;
