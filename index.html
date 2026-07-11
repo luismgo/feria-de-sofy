@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Feria de Sofy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+</head>
+<body>
+  <div id="connection-banner" class="banner banner--offline hidden">📡 Sin conexión — no se pueden confirmar ventas hasta reconectar</div>
+
+  <section id="login-gate" class="screen">
+    <div class="pin-card">
+      <h1>🌸 Feria de Sofy</h1>
+      <p>Ingresá tu correo para entrar</p>
+      <form id="login-form">
+        <input id="login-email" type="email" placeholder="tu@correo.com" required autocomplete="email" />
+        <button type="submit">Enviar link</button>
+      </form>
+      <p id="login-message" class="hidden"></p>
+    </div>
+  </section>
+
+  <section id="feria-selector" class="screen hidden">
+    <h1>🌸 Feria de Sofy</h1>
+    <p>¿En cuál feria vas a trabajar?</p>
+    <div id="feria-cards" class="feria-cards"></div>
+    <button id="btn-nueva-feria" class="btn btn--secondary">+ Nueva feria</button>
+    <button id="btn-reporte-general" class="btn-link">📊 Reporte general</button>
+  </section>
+
+  <section id="reporte-general" class="screen hidden">
+    <header class="feria-header">
+      <button id="btn-volver-selector" class="btn-link">&larr; Volver</button>
+      <h1>📊 Reporte general</h1>
+    </header>
+    <main id="reporte-general-content"></main>
+  </section>
+
+  <section id="feria-view" class="screen hidden">
+    <header class="feria-header">
+      <button id="btn-cambiar-feria" class="btn-link">&larr; Cambiar feria</button>
+      <h1 id="feria-titulo"></h1>
+    </header>
+
+    <nav class="tabs">
+      <button class="tab-btn active" data-tab="vender">🛒 Vender</button>
+      <button class="tab-btn" data-tab="inventario">📦 Inventario</button>
+      <button class="tab-btn" data-tab="ideas">💡 Ideas</button>
+      <button class="tab-btn" data-tab="reportes">📊 Reportes</button>
+    </nav>
+
+    <main id="tab-vender" class="tab-panel"></main>
+    <main id="tab-inventario" class="tab-panel hidden"></main>
+    <main id="tab-ideas" class="tab-panel hidden"></main>
+    <main id="tab-reportes" class="tab-panel hidden"></main>
+  </section>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
