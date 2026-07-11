@@ -119,3 +119,11 @@ body {
 .combo-picker-grid { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; max-height: 200px; overflow-y: auto; }
 .combo-picker-item { background: white; color: var(--text); border: 2px solid #f3d5e2; box-shadow: none; }
 .combo-picker-item.selected { background: var(--accent); color: white; border-color: var(--accent); }
+
+.ideas-filtros { display: flex; gap: 6px; overflow-x: auto; margin-bottom: 12px; }
+.ideas-filtros button { background: white; color: var(--text); box-shadow: none; opacity: 0.6; white-space: nowrap; }
+.ideas-filtros button.active { background: var(--accent); color: white; opacity: 1; }
+.idea-row { display: flex; align-items: center; gap: 8px; background: white; border-radius: var(--radius); padding: 10px; margin-bottom: 6px; }
+.idea-row--hecho .idea-texto { text-decoration: line-through; opacity: 0.5; }
+.idea-tipo { font-size: 0.8rem; white-space: nowrap; }
+.idea-texto { flex: 1; }
