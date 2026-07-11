@@ -1,10 +1,10 @@
 :root {
-  --accent: #FF8FB1;
-  --bg: #FFD6E8;
+  --accent: #E0703F;
+  --bg: #FBDFC5;
   --white: #FFFFFF;
-  --text: #4A2C3A;
+  --text: #5C3A26;
   --radius: 16px;
-  --shadow: 0 4px 12px rgba(255, 143, 177, 0.25);
+  --shadow: 0 4px 12px rgba(224, 112, 63, 0.25);
 }
 
 * { box-sizing: border-box; }
@@ -90,10 +90,10 @@ body {
 .tab-panel { padding: 16px 0; }
 
 .inv-section { background: white; border-radius: var(--radius); padding: 16px; margin-bottom: 16px; }
-.inv-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid #f3d5e2; }
+.inv-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid #DDE3F5; }
 .inv-empty { opacity: 0.6; font-style: italic; }
 .inv-form { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-.inv-form input, .inv-form select { flex: 1; min-width: 100px; padding: 8px; border-radius: 8px; border: 1px solid #f3d5e2; font-family: inherit; }
+.inv-form input, .inv-form select { flex: 1; min-width: 100px; padding: 8px; border-radius: 8px; border: 1px solid #DDE3F5; font-family: inherit; }
 .btn-icon { background: none; box-shadow: none; padding: 4px 8px; font-size: 1.1rem; }
 
 .combos-row { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 12px; }
@@ -117,7 +117,7 @@ body {
 .carrito-total { font-weight: 700; font-size: 1.1rem; }
 .carrito-actions { display: flex; gap: 8px; }
 .combo-picker-grid { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; max-height: 200px; overflow-y: auto; }
-.combo-picker-item { background: white; color: var(--text); border: 2px solid #f3d5e2; box-shadow: none; }
+.combo-picker-item { background: white; color: var(--text); border: 2px solid #DDE3F5; box-shadow: none; }
 .combo-picker-item.selected { background: var(--accent); color: white; border-color: var(--accent); }
 
 .ideas-filtros { display: flex; gap: 6px; overflow-x: auto; margin-bottom: 12px; }
@@ -127,3 +127,20 @@ body {
 .idea-row--hecho .idea-texto { text-decoration: line-through; opacity: 0.5; }
 .idea-tipo { font-size: 0.8rem; white-space: nowrap; }
 .idea-texto { flex: 1; }
+
+@media (min-width: 700px) {
+  .screen { max-width: 700px; margin: 0 auto; }
+  .productos-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .carrito-panel { max-width: 700px; left: 50%; transform: translateX(-50%); border-radius: var(--radius); margin-bottom: 16px; position: sticky; bottom: 16px; }
+}
+
+h1, h2 { color: var(--text); }
+.pin-card { background: white; border-radius: var(--radius); padding: 24px; text-align: center; max-width: 340px; margin: 40px auto; box-shadow: var(--shadow); }
+.pin-card form { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+.pin-card input { padding: 10px; border-radius: 8px; border: 1px solid #DDE3F5; font-family: inherit; text-align: center; }
+
+.banner { padding: 8px 16px; text-align: center; font-size: 0.9rem; }
+.banner--offline { background: #ffe0a3; color: #7a5600; }
+
+.inv-row__foto { width: 36px; height: 36px; object-fit: cover; border-radius: 8px; }
+.inv-hint { font-size: 0.85rem; opacity: 0.7; margin-top: -8px; }
