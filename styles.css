@@ -71,3 +71,11 @@ body {
   z-index: 200;
 }
 .toast--visible { opacity: 1; transform: translate(-50%, 0); }
+
+.feria-cards { display: flex; flex-direction: column; gap: 12px; margin: 20px 0; }
+.feria-card {
+  display: flex; align-items: center; gap: 12px;
+  background: white; padding: 20px; text-align: left;
+  font-size: 1.2rem;
+}
+.feria-card__emoji { font-size: 2rem; }

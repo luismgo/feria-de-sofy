@@ -1,7 +1,10 @@
 import { initAuth } from './auth.js';
+import { initFeriaSelector } from './ferias.js';
 
-function onSignedIn(session) {
-  console.log('Sesión iniciada:', session.user.email);
+function showFeriaSelector() {
+  initFeriaSelector((feria) => {
+    console.log('Feria elegida:', feria.nombre);
+  });
 }
 
-initAuth(onSignedIn);
+initAuth(showFeriaSelector);
