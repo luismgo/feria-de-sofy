@@ -156,6 +156,9 @@ function renderCarrito(feria, container) {
     const ok = await confirmDialog(`¿Confirmar venta por un total de $${total}?`);
     if (!ok) return;
 
+    const btn = panel.querySelector('#btn-confirmar-venta');
+    btn.disabled = true;
+
     const items = carrito.map((l) => l.tipo === 'producto'
       ? { tipo: 'producto', producto_id: l.productoId, cantidad: l.cantidad }
       : { tipo: 'combo', combo_id: l.comboId, producto_ids: l.productos.map((p) => p.id) }
@@ -164,6 +167,7 @@ function renderCarrito(feria, container) {
     const { data, error } = await supabase.rpc('confirmar_venta', { p_feria_id: feria.id, p_items: items });
 
     if (error) {
+      btn.disabled = false;
       toast(`No se pudo confirmar la venta: ${error.message}`);
       return;
     }
