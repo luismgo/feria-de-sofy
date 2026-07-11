@@ -88,3 +88,10 @@ body {
 }
 .tab-btn.active { opacity: 1; background: var(--accent); color: white; }
 .tab-panel { padding: 16px 0; }
+
+.inv-section { background: white; border-radius: var(--radius); padding: 16px; margin-bottom: 16px; }
+.inv-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid #f3d5e2; }
+.inv-empty { opacity: 0.6; font-style: italic; }
+.inv-form { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.inv-form input, .inv-form select { flex: 1; min-width: 100px; padding: 8px; border-radius: 8px; border: 1px solid #f3d5e2; font-family: inherit; }
+.btn-icon { background: none; box-shadow: none; padding: 4px 8px; font-size: 1.1rem; }
