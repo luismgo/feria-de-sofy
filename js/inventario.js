@@ -119,11 +119,18 @@ async function render(feria, container) {
       return;
     }
 
-    await supabase.from('feria_productos').insert({
+    const { error: fpError } = await supabase.from('feria_productos').insert({
       feria_id: feria.id,
       producto_id: producto.id,
       categoria_precio_id: form.categoria_precio_id.value || null,
     });
+
+    if (fpError) {
+      toast('No se pudo vincular el producto a esta feria');
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Agregar producto';
+      return;
+    }
 
     render(feria, container);
   });
@@ -203,12 +210,14 @@ function renderProductos(feria, feriaProductos, categorias, container) {
   list.querySelectorAll('.inv-stock-input').forEach((input) => {
     input.addEventListener('change', async () => {
       await supabase.from('productos').update({ stock: Number(input.value) }).eq('id', input.dataset.productoId);
+      render(feria, container);
     });
   });
 
   list.querySelectorAll('.inv-categoria-select').forEach((select) => {
     select.addEventListener('change', async () => {
       await supabase.from('feria_productos').update({ categoria_precio_id: select.value || null }).eq('id', select.dataset.id);
+      render(feria, container);
     });
   });
 
@@ -274,7 +283,11 @@ async function abrirReutilizarModal(feriaActual, categoriasActuales, container) 
 
     list.querySelectorAll('[data-action="agregar-producto"]').forEach((btn) => {
       btn.addEventListener('click', async () => {
-        await supabase.from('feria_productos').insert({ feria_id: feriaActual.id, producto_id: btn.dataset.id });
+        const { error: fpError } = await supabase.from('feria_productos').insert({ feria_id: feriaActual.id, producto_id: btn.dataset.id });
+        if (fpError) {
+          toast('No se pudo vincular el producto a esta feria');
+          return;
+        }
         toast('Producto agregado a esta feria');
         document.body.removeChild(overlay);
         render(feriaActual, container);
