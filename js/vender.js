@@ -15,6 +15,7 @@ export function initVender(feria) {
   clientVentaIdPendiente = null;
   descuentoActual = 0;
   filtroBusqueda = '';
+  rankingCongelado = [];
   const container = document.getElementById('tab-vender');
   container.innerHTML = '<p>Cargando productos...</p>';
 
@@ -123,8 +124,11 @@ function render(feria, feriaProductos, combos, container) {
       `;
       card.addEventListener('click', async () => {
         const val = prompt(`Precio de "${p.nombre}" en esta feria:`);
-        if (val == null || val.trim() === '' || isNaN(Number(val))) return;
-        await supabase.from('feria_productos').update({ precio_override: Number(val) }).eq('id', fp.id);
+        if (val === null) return; // el usuario canceló el prompt
+        const precio = Number(val);
+        if (!Number.isFinite(precio) || precio <= 0) { toast('Poné un precio válido mayor a 0.'); return; }
+        const { error } = await supabase.from('feria_productos').update({ precio_override: precio }).eq('id', fp.id);
+        if (error) { toast('No se pudo guardar el precio. Probá de nuevo.'); return; }
         loadAndRender(feria, container);
       });
       grid.appendChild(card);
@@ -363,13 +367,14 @@ function seleccionarProductosCombo(combo, disponibles) {
 }
 
 async function cargarRanking(feria) {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('venta_items')
     .select('producto_id, cantidad, ventas!inner(feria_id, anulada)')
     .eq('ventas.feria_id', feria.id)
     .eq('ventas.anulada', false)
     .eq('tipo', 'producto')
     .not('producto_id', 'is', null);
+  if (error) console.warn('No se pudo cargar el ranking de más vendidos:', error.message);
   const conteo = {};
   (data || []).forEach((i) => { conteo[i.producto_id] = (conteo[i.producto_id] || 0) + i.cantidad; });
   rankingCongelado = Object.entries(conteo).sort((a, b) => b[1] - a[1]).map(([id]) => id);
