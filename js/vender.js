@@ -6,16 +6,22 @@ let carrito = []; // { tipo: 'producto', productoId, nombre, precio, cantidad } 
 let metodoPagoActual = 'efectivo';
 let clientVentaIdPendiente = null;
 let descuentoActual = 0;
+let filtroBusqueda = '';
+let rankingCongelado = []; // ids de producto ordenados por más vendidos, calculado 1 vez por sesión de feria
 
 export function initVender(feria) {
   carrito = [];
   metodoPagoActual = 'efectivo';
   clientVentaIdPendiente = null;
   descuentoActual = 0;
+  filtroBusqueda = '';
   const container = document.getElementById('tab-vender');
   container.innerHTML = '<p>Cargando productos...</p>';
 
-  loadAndRender(feria, container);
+  // initVender NO puede ser async (devuelve la función de cleanup a nav.js), así que
+  // no se puede `await`. Se re-renderiza cuando el ranking resuelve, para que el orden
+  // "más vendidos arriba" se aplique aunque el usuario no interactúe.
+  cargarRanking(feria).then(() => loadAndRender(feria, container));
 
   realtimeChannel = supabase
     .channel(`vender-${feria.id}`)
@@ -32,7 +38,7 @@ export function initVender(feria) {
 
 async function loadAndRender(feria, container) {
   const [{ data: feriaProductos, error: prodError }, { data: combos, error: comboError }] = await Promise.all([
-    supabase.from('feria_productos').select('categoria_precio_id, precio_override, productos(id, nombre, imagen_url, stock), categorias_precio(precio)').eq('feria_id', feria.id),
+    supabase.from('feria_productos').select('id, categoria_precio_id, precio_override, productos(id, nombre, imagen_url, stock), categorias_precio(precio)').eq('feria_id', feria.id),
     supabase.from('combos').select('*').eq('feria_id', feria.id).eq('activo', true).order('nombre'),
   ]);
 
@@ -61,6 +67,20 @@ function cantidadEnCarrito(productoId) {
 function render(feria, feriaProductos, combos, container) {
   container.innerHTML = '';
 
+  const buscador = document.createElement('input');
+  buscador.className = 'vender-buscador';
+  buscador.type = 'search';
+  buscador.placeholder = '🔎 Buscar producto...';
+  buscador.value = filtroBusqueda;
+  buscador.addEventListener('input', () => {
+    filtroBusqueda = buscador.value;
+    const scroll = window.scrollY;
+    render(feria, feriaProductos, combos, container);
+    window.scrollTo(0, scroll);
+    container.querySelector('.vender-buscador')?.focus();
+  });
+  container.appendChild(buscador);
+
   if (combos.length > 0) {
     const combosRow = document.createElement('div');
     combosRow.className = 'combos-row';
@@ -74,19 +94,47 @@ function render(feria, feriaProductos, combos, container) {
     container.appendChild(combosRow);
   }
 
+  const ordenados = [...feriaProductos].sort((a, b) => {
+    const ra = rankingCongelado.indexOf(a.productos.id);
+    const rb = rankingCongelado.indexOf(b.productos.id);
+    const rankA = ra === -1 ? Infinity : ra;
+    const rankB = rb === -1 ? Infinity : rb;
+    if (rankA !== rankB) return rankA - rankB;               // más vendidos primero (congelado)
+    return a.productos.nombre.localeCompare(b.productos.nombre, 'es'); // luego alfabético estable
+  });
+  const visibles = filtroBusqueda
+    ? ordenados.filter((fp) => fp.productos.nombre.toLowerCase().includes(filtroBusqueda.toLowerCase()))
+    : ordenados;
+
   const grid = document.createElement('div');
   grid.className = 'productos-grid';
-  feriaProductos.forEach((fp) => {
+  visibles.forEach((fp) => {
     const p = fp.productos;
     const precio = precioEfectivo(fp);
     const disponible = p.stock - cantidadEnCarrito(p.id);
     const card = document.createElement('button');
     card.className = 'producto-card';
-    card.disabled = disponible <= 0 || precio == null;
+    if (precio == null) {
+      card.classList.add('producto-card--sin-precio');
+      card.innerHTML = `
+        ${p.imagen_url ? `<img src="${p.imagen_url}" alt="${p.nombre}" />` : '<div class="producto-card__sin-foto">🌸</div>'}
+        <span class="producto-card__nombre">${p.nombre}</span>
+        <span class="producto-card__poner-precio">Tocar para poner precio</span>
+      `;
+      card.addEventListener('click', async () => {
+        const val = prompt(`Precio de "${p.nombre}" en esta feria:`);
+        if (val == null || val.trim() === '' || isNaN(Number(val))) return;
+        await supabase.from('feria_productos').update({ precio_override: Number(val) }).eq('id', fp.id);
+        loadAndRender(feria, container);
+      });
+      grid.appendChild(card);
+      return; // continúa el forEach
+    }
+    card.disabled = disponible <= 0;
     card.innerHTML = `
       ${p.imagen_url ? `<img src="${p.imagen_url}" alt="${p.nombre}" />` : '<div class="producto-card__sin-foto">🌸</div>'}
       <span class="producto-card__nombre">${p.nombre}</span>
-      <span class="producto-card__precio">${precio != null ? `$${precio}` : 'sin precio'}</span>
+      <span class="producto-card__precio">$${precio}</span>
       <span class="producto-card__stock">${disponible > 0 ? `Disponible: ${disponible}` : 'Sin stock'}</span>
     `;
     card.addEventListener('click', () => agregarProductoAlCarrito(p, precio, feria, container));
@@ -312,4 +360,17 @@ function seleccionarProductosCombo(combo, disponibles) {
       }
     });
   });
+}
+
+async function cargarRanking(feria) {
+  const { data } = await supabase
+    .from('venta_items')
+    .select('producto_id, cantidad, ventas!inner(feria_id, anulada)')
+    .eq('ventas.feria_id', feria.id)
+    .eq('ventas.anulada', false)
+    .eq('tipo', 'producto')
+    .not('producto_id', 'is', null);
+  const conteo = {};
+  (data || []).forEach((i) => { conteo[i.producto_id] = (conteo[i.producto_id] || 0) + i.cantidad; });
+  rankingCongelado = Object.entries(conteo).sort((a, b) => b[1] - a[1]).map(([id]) => id);
 }
