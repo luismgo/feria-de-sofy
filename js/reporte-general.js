@@ -12,7 +12,11 @@ export async function initReporteGeneral({ onVolver }) {
   };
 
   const { data: ferias } = await supabase.from('ferias').select('*').order('nombre');
-  const { data: ventas } = await supabase.from('ventas').select('feria_id, total');
+  const { data: ventas, error: ventasError } = await supabase.from('ventas').select('feria_id, total').eq('anulada', false);
+  if (ventasError) {
+    content.innerHTML = '<p class="error">No se pudo cargar el reporte general — revisá la conexión</p>';
+    return;
+  }
 
   const porFeria = {};
   (ferias || []).forEach((f) => { porFeria[f.id] = { feria: f, total: 0, cantidad: 0 }; });

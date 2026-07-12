@@ -9,17 +9,19 @@ export function initReportes(feria) {
 
 async function render(feria, container) {
   const { data: ventas, error: ventasError } = await supabase
-    .from('ventas').select('*').eq('feria_id', feria.id).order('created_at', { ascending: false });
+    .from('ventas').select('*').eq('feria_id', feria.id).eq('anulada', false).order('created_at', { ascending: false });
 
   const { data: items, error: itemsError } = await supabase
     .from('venta_items')
-    .select('*, ventas!inner(feria_id)')
-    .eq('ventas.feria_id', feria.id);
+    .select('*, ventas!inner(feria_id, anulada)')
+    .eq('ventas.feria_id', feria.id)
+    .eq('ventas.anulada', false);
 
   const { data: comboItems } = await supabase
     .from('venta_item_combo_productos')
-    .select('producto_nombre, venta_items!inner(venta_id, ventas!inner(feria_id))')
-    .eq('venta_items.ventas.feria_id', feria.id);
+    .select('producto_nombre, venta_items!inner(venta_id, ventas!inner(feria_id, anulada))')
+    .eq('venta_items.ventas.feria_id', feria.id)
+    .eq('venta_items.ventas.anulada', false);
 
   if (ventasError || itemsError) {
     container.innerHTML = '<p class="error">No se pudo cargar el reporte</p>';
@@ -41,26 +43,41 @@ async function render(feria, container) {
     </section>
   `;
 
-  renderPorFecha(ventas, container.querySelector('#reporte-fechas'));
+  renderPorFecha(ventas, items, container.querySelector('#reporte-fechas'));
   renderTopProductos(items, comboItems || [], container.querySelector('#reporte-top-productos'));
   renderPorCategoria(items, container.querySelector('#reporte-categorias'));
 }
 
-function renderPorFecha(ventas, el) {
-  const hoy = new Date().toISOString().slice(0, 10);
+function renderPorFecha(ventas, items, el) {
+  const hoy = new Date().toLocaleDateString('en-CA'); // fecha LOCAL (YYYY-MM-DD), no UTC
+  const itemsPorVenta = {};
+  items.forEach((i) => {
+    (itemsPorVenta[i.venta_id] = itemsPorVenta[i.venta_id] || []).push(i);
+  });
+
   const porFecha = {};
   ventas.forEach((v) => {
-    const fecha = v.created_at.slice(0, 10);
-    if (!porFecha[fecha]) porFecha[fecha] = { total: 0, cantidad: 0 };
-    porFecha[fecha].total += Number(v.total);
-    porFecha[fecha].cantidad += 1;
+    const fecha = new Date(v.created_at).toLocaleDateString('en-CA'); // fecha LOCAL de la venta
+    (porFecha[fecha] = porFecha[fecha] || []).push(v);
   });
+
   const fechas = Object.keys(porFecha).sort().reverse();
   el.innerHTML = fechas.map((fecha) => {
-    const r = porFecha[fecha];
+    const ventasDia = porFecha[fecha];
+    const totalDia = ventasDia.reduce((s, v) => s + Number(v.total), 0);
+    const porMetodo = { efectivo: 0, transferencia: 0, otro: 0 };
+    ventasDia.forEach((v) => { porMetodo[v.metodo_pago] = (porMetodo[v.metodo_pago] || 0) + Number(v.total); });
     const esHoy = fecha === hoy;
+    const filas = ventasDia.map((v) => {
+      const hora = new Date(v.created_at).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
+      const desc = (itemsPorVenta[v.id] || []).map((i) => i.tipo === 'producto' ? `${i.producto_nombre} x${i.cantidad}` : i.producto_nombre).join(', ') || '—';
+      const metodoIcon = v.metodo_pago === 'efectivo' ? '💵' : v.metodo_pago === 'transferencia' ? '📲' : '🔵';
+      return `<div class="venta-fila"><span>${hora} ${metodoIcon}</span><span class="venta-fila__desc">${desc}</span><span>$${v.total}</span></div>`;
+    }).join('');
     return `<details class="historial-dia" ${esHoy ? 'open' : ''}>
-      <summary>${esHoy ? '⭐ Hoy' : fecha} — $${r.total} (${r.cantidad} ventas)</summary>
+      <summary>${esHoy ? '⭐ Hoy' : fecha} — $${totalDia} (${ventasDia.length} ventas)</summary>
+      <div class="dia-metodos">💵 $${porMetodo.efectivo} · 📲 $${porMetodo.transferencia} · 🔵 $${porMetodo.otro}</div>
+      ${filas}
     </details>`;
   }).join('') || '<p class="inv-empty">Todavía no hay ventas</p>';
 }
