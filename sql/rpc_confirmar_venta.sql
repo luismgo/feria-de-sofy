@@ -39,7 +39,7 @@ begin
     end if;
   end if;
 
-  if p_metodo_pago not in ('efectivo','transferencia','otro') then
+  if p_metodo_pago is null or p_metodo_pago not in ('efectivo','transferencia','otro') then
     raise exception 'Método de pago inválido: %', p_metodo_pago;
   end if;
   if coalesce(p_descuento, 0) < 0 then
@@ -171,6 +171,9 @@ begin
     -- vez de un error crudo (garantía "tocá de nuevo, no se cobra dos veces").
     select id, ventas.total into v_existing_id, v_existing_total
       from ventas where client_venta_id = p_client_venta_id;
+    -- Si NO hay venta ganadora, el unique_violation no era la idempotencia esperada
+    -- (p.ej. un constraint futuro en tablas hijas): re-lanzar en vez de devolver NULL.
+    if not found then raise; end if;
     return query select v_existing_id, v_existing_total;
     return;
   end;
