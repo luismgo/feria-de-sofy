@@ -185,7 +185,8 @@ function renderCarrito(feria, container) {
     );
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
+    let timedOut = false;
+    const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, 15000);
 
     let data, error;
     try {
@@ -198,7 +199,9 @@ function renderCarrito(feria, container) {
         })
         .abortSignal(controller.signal));
     } catch (e) {
-      error = { message: 'timeout' };
+      // postgrest-js normalmente RESUELVE con { error } ante un abort (no rechaza);
+      // este catch es un respaldo por si alguna versión/entorno sí rechaza.
+      error = e;
     } finally {
       clearTimeout(timeout);
     }
@@ -206,12 +209,14 @@ function renderCarrito(feria, container) {
     btn.disabled = false;
     btn.textContent = 'Confirmar venta';
 
+    // `timedOut` es la señal determinística de nuestro propio timeout (no depende de
+    // matchear el texto del error); el regex cubre además un abort de otra fuente.
+    if (timedOut || (error && /abort/i.test(error.message || ''))) {
+      toast('La red está lenta. Tocá de nuevo para reintentar — no se cobra dos veces.');
+      return;
+    }
     if (error) {
-      if (error.message === 'timeout' || /abort/i.test(error.message || '')) {
-        toast('La red está lenta. Tocá de nuevo para reintentar — no se cobra dos veces.');
-      } else {
-        toast(`No se pudo confirmar la venta: ${error.message}`);
-      }
+      toast(`No se pudo confirmar la venta: ${error.message}`);
       return;
     }
 
