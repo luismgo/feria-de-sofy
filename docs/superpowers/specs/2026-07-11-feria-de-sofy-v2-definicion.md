@@ -120,6 +120,10 @@ sin reconstruir las 53 tarjetas (`refrescarCarrito → loadAndRender`, `vender.j
 **manteniendo** la subscripción Realtime para reconciliar entre dispositivos
 (porque el nº de celulares quedó incierto).
 
+**13b. Microcopy autoexplicativo (usuaria no técnica):** Sofy solo RECIBE la app, no la hizo ni tiene a quién preguntarle en la feria. Cada control nuevo de la v2 (método de pago, descuento, cerrar caja, anular, buscador, costo, receta) y las pantallas existentes llevan subtítulo / texto de ayuda inline y/o tooltip que explica qué hacen. Se implementa como una pasada dedicada de microcopy (Tarea 14 del plan), escrita al final contra la UI ya completa.
+
+**13c. Consistencia visual y contraste (verificación real en navegador):** la app se la queda Sofy; no basta con que el código "parezca correcto", hay que **abrirla en el navegador y mirarla**. Pasada de QA visual contra la UI viva (localhost y móvil) que revisa contraste legible (AA), que todos los controles del mismo rango se vean como parte del mismo diseño (mismos botones, no unos con estilo y otros como link suelto), y que el layout no quede descuadrado. Defectos ya detectados que esta pasada debe cerrar: (a) **los nombres de las ferias no son visibles** (contraste/color) en la pantalla de selección de feria; (b) el **"Reporte general" es texto-con-link, no un botón** como todo lo demás; (c) en **Vender, el panel del carrito de abajo no está centrado**. Más "seguro más cosas de UI" que aparezcan al revisar en vivo. Se implementa como una pasada dedicada de QA visual (Tarea 15 del plan), corrida por el controlador en el navegador contra la UI ya completa.
+
 **13. Piso de confiabilidad barato:** `client_venta_id` (ya en el pass) +
 `timeout/AbortController` en la llamada al RPC con revert de `btn.disabled` y
 toast de reintento (arregla el **botón colgado**) + health-check real (ping a

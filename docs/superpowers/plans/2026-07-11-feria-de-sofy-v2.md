@@ -802,7 +802,8 @@ Reemplazar el listener completo de `#btn-confirmar-venta` en `renderCarrito()` p
     );
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
+    let timedOut = false;
+    const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, 15000);
 
     let data, error;
     try {
@@ -815,7 +816,9 @@ Reemplazar el listener completo de `#btn-confirmar-venta` en `renderCarrito()` p
         })
         .abortSignal(controller.signal));
     } catch (e) {
-      error = { message: 'timeout' };
+      // postgrest-js normalmente RESUELVE con { error } ante un abort (no rechaza);
+      // este catch es un respaldo por si alguna versión/entorno sí rechaza.
+      error = e;
     } finally {
       clearTimeout(timeout);
     }
@@ -823,12 +826,14 @@ Reemplazar el listener completo de `#btn-confirmar-venta` en `renderCarrito()` p
     btn.disabled = false;
     btn.textContent = 'Confirmar venta';
 
+    // `timedOut` es la señal determinística de nuestro propio timeout (no depende de
+    // matchear el texto del error); el regex cubre además un abort de otra fuente.
+    if (timedOut || (error && /abort/i.test(error.message || ''))) {
+      toast('La red está lenta. Tocá de nuevo para reintentar — no se cobra dos veces.');
+      return;
+    }
     if (error) {
-      if (error.message === 'timeout' || /abort/i.test(error.message || '')) {
-        toast('La red está lenta. Tocá de nuevo para reintentar — no se cobra dos veces.');
-      } else {
-        toast(`No se pudo confirmar la venta: ${error.message}`);
-      }
+      toast(`No se pudo confirmar la venta: ${error.message}`);
       return;
     }
 
@@ -1629,6 +1634,78 @@ git commit -m "Void sales from today's report + remove per-sale confirm dialog"
 
 ---
 
+### Task 14: Pasada de microcopy autoexplicativo (usuaria no técnica)
+
+> **Pasada corrida por el controlador contra la UI ya completa (Tareas 1-13 hechas y verificadas en navegador).** No es una tarea de subagente a ciegas: el copy exacto se escribe mirando cada pantalla renderizada, no adivinando. Requisito de producto: Sofy **solo recibe** la app (no la construyó, no tiene a quién preguntarle en la feria), así que cada control debe explicarse solo. Ver definición v2, ítem 13b.
+
+**Files:**
+- Modify: `js/vender.js`, `js/inventario.js`, `js/insumos.js`, `js/reportes.js` (subtítulos / texto de ayuda inline en los render), `index.html` (subtítulos de secciones estáticas), `styles.css` (clase `.help-text`).
+- Modify: (según haga falta) cualquier `.js` que renderice un control nuevo de la v2.
+
+**Interfaces:**
+- Consumes: la UI final de todas las tareas anteriores (método de pago, descuento, buscador, costo, cerrar caja, anular, receta 🧪).
+- Produces: cada control clave con subtítulo / texto de ayuda inline y/o `title=` tooltip que explica en una frase qué hace y por qué, en el mismo tono simple del resto de la app.
+
+- [ ] **Step 1: Estilo base de ayuda** — agregar en `styles.css` una clase reutilizable para el texto de ayuda, con contraste AA sobre `--bg` (no gris apagado ilegible):
+
+```css
+.help-text { font-size: 0.8rem; line-height: 1.3; color: #6E4A34; opacity: 0.95; margin-top: 2px; }
+```
+
+- [ ] **Step 2: Inventario del microcopy** — recorrer en el navegador cada pantalla y listar cada control que necesita ayuda. Cobertura mínima obligatoria (control → qué debe decir el subtítulo/tooltip):
+  - Método de pago (efectivo / transferencia / otro) → "Cómo te pagó el cliente. 'Otro' incluye QR."
+  - Descuento → "Rebaja en $ sobre el total de esta venta."
+  - Costo de producto / insumo → "Lo que te cuesta a vos. Sirve para calcular la ganancia; no lo ve el cliente."
+  - Cerrar caja (esperado vs contado, diferencia) → "'Esperado' es lo que debería haber según las ventas. Escribí lo que contaste; la 'diferencia' te dice si sobra o falta."
+  - Anular venta → "Repone el stock y marca la venta como anulada. Queda registrada, no se borra."
+  - Buscador (Vender) → "Filtrá productos por nombre para encontrarlos rápido."
+  - Receta 🧪 (insumos por producto) → "Insumos que se descuentan al vender este producto."
+  - Pantallas existentes que ya confundían: categorías de precio, combos, reutilizar producto, reportes.
+
+- [ ] **Step 3: Escribir el copy en cada render** — para cada control del inventario, agregar el subtítulo/ayuda en el punto de render correspondiente (ej. bajo el selector de pago en `vender.js`, bajo los inputs de costo en `inventario.js`/`insumos.js`, bajo los campos de cierre en `reportes.js`), usando `.help-text` para inline y `title=`/`aria-label` para tooltip. Copy en el tono simple y directo de la app (2ª persona, sin jerga: "venta", "caja", "stock", no "transacción", "RPC", "commit").
+
+- [ ] **Step 4: Verificación en navegador** — abrir cada pantalla en `http://localhost:8000` y en viewport móvil. Criterio de aceptación: una persona que ve la app por primera vez entiende cada control sin preguntarle a nadie. Ningún control nuevo de la v2 queda sin explicación. El texto de ayuda es legible (contraste AA) y no rompe el layout.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add -A
+git commit -m "Add self-explanatory microcopy for non-technical user across all controls"
+```
+
+---
+
+### Task 15: Pasada de QA visual en navegador (consistencia, contraste, layout)
+
+> **Pasada corrida por el controlador en el navegador (Claude-in-Chrome) contra la UI ya completa.** Requiere ver la app renderizada y juzgar visualmente — no se puede hacer a ciegas desde el diff. La app se la queda Sofy, así que "parece correcto en el código" no alcanza: hay que abrirla y mirarla. Ver definición v2, ítem 13c.
+
+**Files:**
+- Modify: `styles.css` (contraste, consistencia de botones, layout/centrado), y los `.js`/`index.html` que rendericen un control mal estilado (ej. convertir el link de "Reporte general" en un `<button>`/`.btn` como el resto).
+
+**Interfaces:**
+- Consumes: la UI final de todas las tareas anteriores + el microcopy de la Tarea 14.
+- Produces: una UI visualmente consistente (todos los controles del mismo rango se ven iguales), legible (AA) y bien encuadrada, con los defectos ya detectados cerrados.
+
+- [ ] **Step 1: Abrir la app en el navegador** — servir `python -m http.server 8000` desde la raíz, abrir `http://localhost:8000` en Chrome (desktop y viewport móvil ~390px). Recorrer cada pantalla: selección de feria, Vender (carrito), Inventario, Insumos, Reportes (cierre, por fecha, general), login.
+
+- [ ] **Step 2: Cerrar los defectos ya detectados (obligatorio)** — cada uno verificado visualmente antes/después:
+  1. **Nombres de las ferias no visibles** en la pantalla de selección → corregir color/contraste para que el nombre de cada feria se lea claramente sobre su tarjeta (AA).
+  2. **"Reporte general" es texto-con-link, no botón** → estilizarlo como los demás controles (mismo `.btn`/botón que el resto de la app), no un `<a>` suelto.
+  3. **Panel del carrito abajo en Vender no está centrado** → centrar/encuadrar el panel del carrito para que quede alineado con el resto del contenido en desktop y móvil.
+
+- [ ] **Step 3: Barrido de consistencia y contraste** — con los defectos base cerrados, revisar el resto: ¿todos los botones de acción usan el mismo estilo (paleta Toki, `--radius`, no unos con estilo y otros como link)? ¿Algún texto queda con contraste bajo (< AA) sobre `--bg`/`--accent`? ¿Algún elemento se desborda, se solapa o queda descentrado en móvil? Anotar y corregir cada hallazgo ("seguro más cosas de UI").
+
+- [ ] **Step 4: Verificación final** — segunda pasada en navegador (desktop + móvil) confirmando que los 3 defectos base están cerrados y que no quedan inconsistencias visibles. Opcional: capturar un GIF/imagen de las pantallas clave para el registro.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add -A
+git commit -m "Visual QA pass: contrast, control consistency, and layout fixes"
+```
+
+---
+
 ## Self-Review
 
 **Spec coverage (contra la definición v2, sección MUST):**
@@ -1648,6 +1725,8 @@ git commit -m "Void sales from today's report + remove per-sale confirm dialog"
 - Guardas de fetch (no mostrar `$0` falso como real): reporte-general con chequeo de `error` → Tarea 11 Step 3; helper `mutar` en escrituras de Inventario/Insumos → Tarea 10. ✅
 - Zona horaria: cierre de caja y "por fecha" usan **fecha local** (`toLocaleDateString('en-CA')` / inicio de día local), no UTC, para que la caja de una feria que cierra de noche cuadre → Tareas 11, 12. ✅
 - Supuesto de dispositivos: quedó "depende" → se **mantiene** el Realtime (Tarea 9 no lo remueve). ✅
+- Microcopy autoexplicativo para usuaria no técnica (subtítulos/tooltips en cada control) → Tarea 14. ✅
+- QA visual en navegador: consistencia, contraste AA, layout, + defectos detectados (nombres de feria invisibles, reporte general como link, carrito descentrado) → Tarea 15. ✅
 
 **Nota de dependencia:** las Tareas 1-4 (SQL) deben aplicarse antes que cualquier tarea de frontend que llame al RPC nuevo (6, 7, 13). La Tarea 5 (costo) debe ir antes de que las ventas reales dependan del snapshot, pero puede ir después de la 3 sin bloquear.
 
