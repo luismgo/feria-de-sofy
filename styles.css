@@ -163,3 +163,10 @@ button:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .dia-metodos { font-size: 0.85rem; opacity: 0.8; padding: 6px 0; border-bottom: 1px solid #f0dccb; }
 .venta-fila { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; font-size: 0.9rem; }
 .venta-fila__desc { flex: 1; opacity: 0.8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+#reporte-cierre .cierre-linea { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; }
+#reporte-cierre input { width: 120px; padding: 6px 8px; border-radius: 8px; border: 1px solid #DDE3F5; font-family: inherit; text-align: right; }
+.cierre-hr { border: none; border-top: 1px solid #f0dccb; margin: 8px 0; }
+.cierre-ok { color: #2E7D32; }
+.cierre-diff { color: #C0392B; }
+#btn-cerrar-caja { width: 100%; margin-top: 12px; }
