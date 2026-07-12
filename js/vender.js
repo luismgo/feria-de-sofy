@@ -5,11 +5,13 @@ let realtimeChannel = null;
 let carrito = []; // { tipo: 'producto', productoId, nombre, precio, cantidad } | { tipo: 'combo', comboId, nombre, precio, productos: [{id, nombre}] }
 let metodoPagoActual = 'efectivo';
 let clientVentaIdPendiente = null;
+let descuentoActual = 0;
 
 export function initVender(feria) {
   carrito = [];
   metodoPagoActual = 'efectivo';
   clientVentaIdPendiente = null;
+  descuentoActual = 0;
   const container = document.getElementById('tab-vender');
   container.innerHTML = '<p>Cargando productos...</p>';
 
@@ -120,7 +122,9 @@ function renderCarrito(feria, container) {
   panel.id = 'carrito-panel';
   panel.className = 'carrito-panel';
 
-  const total = carrito.reduce((sum, l) => sum + l.precio * (l.tipo === 'producto' ? l.cantidad : 1), 0);
+  const bruto = carrito.reduce((sum, l) => sum + l.precio * (l.tipo === 'producto' ? l.cantidad : 1), 0);
+  descuentoActual = Math.min(descuentoActual, bruto); // re-clamp: si el carrito se achicó, el descuento no puede superar el nuevo bruto
+  const total = Math.max(0, bruto - descuentoActual);
 
   panel.innerHTML = `
     <h3>🛒 Carrito</h3>
@@ -132,7 +136,10 @@ function renderCarrito(feria, container) {
         </div>
       `).join('') || '<p class="inv-empty">Carrito vacío</p>'}
     </div>
-    <p class="carrito-total">Total: $${total}</p>
+    <div class="carrito-descuento">
+      <label>Descuento $ <input type="number" id="input-descuento" min="0" step="1" value="${descuentoActual || ''}" placeholder="0" /></label>
+    </div>
+    <p class="carrito-total">Total: $${total}${descuentoActual ? ` <s>$${bruto}</s>` : ''}</p>
     <div class="carrito-pago">
       <span>Pago:</span>
       ${['efectivo', 'transferencia', 'otro'].map((m) => `
@@ -166,6 +173,17 @@ function renderCarrito(feria, container) {
     });
   });
 
+  const inputDescuento = panel.querySelector('#input-descuento');
+  if (inputDescuento) {
+    inputDescuento.addEventListener('change', () => {
+      const val = Math.max(0, Number(inputDescuento.value) || 0);
+      descuentoActual = Math.min(val, bruto);
+      const viejo = container.querySelector('#carrito-panel');
+      const nuevo = renderCarrito(feria, container);
+      if (viejo) viejo.replaceWith(nuevo);
+    });
+  }
+
   panel.querySelector('#btn-confirmar-venta').addEventListener('click', async () => {
     if (!navigator.onLine) {
       toast('Sin conexión — no se puede confirmar la venta ahora');
@@ -195,6 +213,7 @@ function renderCarrito(feria, container) {
           p_feria_id: feria.id,
           p_items: items,
           p_metodo_pago: metodoPagoActual,
+          p_descuento: descuentoActual,
           p_client_venta_id: clientVentaIdPendiente,
         })
         .abortSignal(controller.signal));
@@ -223,6 +242,7 @@ function renderCarrito(feria, container) {
     carrito = [];
     clientVentaIdPendiente = null;
     metodoPagoActual = 'efectivo';
+    descuentoActual = 0;
     if (window.confetti) window.confetti({ particleCount: 120, spread: 80, origin: { y: 0.7 } });
     toast(`¡Venta registrada! 🎉 Total: $${data[0].total}`);
     loadAndRender(feria, container);

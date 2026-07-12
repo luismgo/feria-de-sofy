@@ -117,6 +117,9 @@ body {
 }
 .carrito-linea { display: flex; justify-content: space-between; padding: 4px 0; }
 .carrito-total { font-weight: 700; font-size: 1.1rem; }
+.carrito-descuento { margin: 4px 0; font-size: 0.9rem; }
+.carrito-descuento input { width: 90px; padding: 4px 8px; border-radius: 8px; border: 1px solid #DDE3F5; font-family: inherit; }
+.carrito-total s { opacity: 0.5; font-weight: 500; font-size: 0.9rem; }
 .carrito-pago { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 8px 0; font-size: 0.9rem; }
 .pago-btn { background: white; color: var(--text); box-shadow: none; border: 2px solid #DDE3F5; padding: 6px 10px; font-size: 0.85rem; }
 .pago-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
