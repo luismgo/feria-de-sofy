@@ -25,6 +25,11 @@ function showTab(tab) {
   document.querySelectorAll('.tab-btn').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.tab === tab);
   });
+  // Reportes es una vista de solo lectura (arqueo / cerrar caja): tiene que re-fetchear
+  // cada vez que se entra, o "Cerrar caja" mostraría totales viejos si se vendió más
+  // desde la primera visita. Las otras pestañas se cachean para preservar su estado
+  // (ej. el carrito de Vender no se debe vaciar al cambiar de pestaña y volver).
+  if (tab === 'reportes') clearTab(tab);
   if (!currentCleanups[tab]) {
     const cleanup = INIT_FNS[tab](currentFeria);
     currentCleanups[tab] = cleanup || (() => {});
