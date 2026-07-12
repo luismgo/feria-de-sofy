@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient.js';
-import { confirmDialog } from './ui.js';
+import { confirmDialog, mutar } from './ui.js';
 
 export async function fetchInsumos() {
   const { data } = await supabase.from('insumos').select('*').order('nombre');
@@ -33,13 +33,13 @@ export async function renderInsumosSection(container) {
 
   list.querySelectorAll('.insumo-stock-input').forEach((input) => {
     input.addEventListener('change', async () => {
-      await supabase.from('insumos').update({ stock: Number(input.value) }).eq('id', input.dataset.id);
+      await mutar(supabase.from('insumos').update({ stock: Number(input.value) }).eq('id', input.dataset.id), 'No se pudo actualizar el stock del insumo');
     });
   });
 
   list.querySelectorAll('.insumo-costo-input').forEach((input) => {
     input.addEventListener('change', async () => {
-      await supabase.from('insumos').update({ costo: Number(input.value) }).eq('id', input.dataset.id);
+      await mutar(supabase.from('insumos').update({ costo: Number(input.value) }).eq('id', input.dataset.id), 'No se pudo actualizar el costo del insumo');
     });
   });
 

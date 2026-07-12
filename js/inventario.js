@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient.js';
-import { confirmDialog, toast } from './ui.js';
+import { confirmDialog, toast, mutar } from './ui.js';
 import { renderInsumosSection, abrirRecetaModal } from './insumos.js';
 
 export function initInventario(feria) {
@@ -216,21 +216,21 @@ function renderProductos(feria, feriaProductos, categorias, container) {
 
   list.querySelectorAll('.inv-stock-input').forEach((input) => {
     input.addEventListener('change', async () => {
-      await supabase.from('productos').update({ stock: Number(input.value) }).eq('id', input.dataset.productoId);
+      await mutar(supabase.from('productos').update({ stock: Number(input.value) }).eq('id', input.dataset.productoId), 'No se pudo actualizar el stock');
       render(feria, container);
     });
   });
 
   list.querySelectorAll('.inv-costo-input').forEach((input) => {
     input.addEventListener('change', async () => {
-      await supabase.from('productos').update({ costo: Number(input.value) }).eq('id', input.dataset.productoId);
+      await mutar(supabase.from('productos').update({ costo: Number(input.value) }).eq('id', input.dataset.productoId), 'No se pudo actualizar el costo');
       render(feria, container);
     });
   });
 
   list.querySelectorAll('.inv-categoria-select').forEach((select) => {
     select.addEventListener('change', async () => {
-      await supabase.from('feria_productos').update({ categoria_precio_id: select.value || null }).eq('id', select.dataset.id);
+      await mutar(supabase.from('feria_productos').update({ categoria_precio_id: select.value || null }).eq('id', select.dataset.id), 'No se pudo actualizar la categoría');
       render(feria, container);
     });
   });

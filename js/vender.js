@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient.js';
 import { confirmDialog, toast } from './ui.js';
+import { isOnline } from './connection.js';
 
 let realtimeChannel = null;
 let carrito = []; // { tipo: 'producto', productoId, nombre, precio, cantidad } | { tipo: 'combo', comboId, nombre, precio, productos: [{id, nombre}] }
@@ -240,7 +241,7 @@ function renderCarrito(feria, container) {
   }
 
   panel.querySelector('#btn-confirmar-venta').addEventListener('click', async () => {
-    if (!navigator.onLine) {
+    if (!isOnline()) {
       toast('Sin conexión — no se puede confirmar la venta ahora');
       return;
     }

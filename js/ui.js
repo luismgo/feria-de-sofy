@@ -33,3 +33,13 @@ export function toast(message) {
     setTimeout(() => el.remove(), 300);
   }, 2500);
 }
+
+// Ejecuta una escritura de Supabase y avisa por toast si falla, en vez de fallar en silencio.
+export async function mutar(promesa, mensajeError = 'No se pudo guardar el cambio') {
+  const { data, error } = await promesa;
+  if (error) {
+    toast(mensajeError);
+    console.error(mensajeError, error);
+  }
+  return { data, error };
+}
