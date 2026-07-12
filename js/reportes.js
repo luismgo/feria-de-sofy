@@ -57,7 +57,7 @@ async function render(feria, container) {
   `;
 
   renderCierre(ventas, anuladasHoy || 0, container.querySelector('#cierre-content'));
-  renderPorFecha(ventas, items, container.querySelector('#reporte-fechas'));
+  renderPorFecha(feria, container, ventas, items, container.querySelector('#reporte-fechas'));
   renderTopProductos(items, comboItems || [], container.querySelector('#reporte-top-productos'));
   renderPorCategoria(items, container.querySelector('#reporte-categorias'));
 }
@@ -102,7 +102,7 @@ function renderCierre(ventas, anuladasHoy, el) {
   });
 }
 
-function renderPorFecha(ventas, items, el) {
+function renderPorFecha(feria, containerRaiz, ventas, items, el) {
   const hoy = new Date().toLocaleDateString('en-CA'); // fecha LOCAL (YYYY-MM-DD), no UTC
   const itemsPorVenta = {};
   items.forEach((i) => {
@@ -126,7 +126,8 @@ function renderPorFecha(ventas, items, el) {
       const hora = new Date(v.created_at).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
       const desc = (itemsPorVenta[v.id] || []).map((i) => i.tipo === 'producto' ? `${i.producto_nombre} x${i.cantidad}` : i.producto_nombre).join(', ') || '—';
       const metodoIcon = v.metodo_pago === 'efectivo' ? '💵' : v.metodo_pago === 'transferencia' ? '📲' : '🔵';
-      return `<div class="venta-fila"><span>${hora} ${metodoIcon}</span><span class="venta-fila__desc">${desc}</span><span>$${v.total}</span></div>`;
+      const anularBtn = esHoy ? `<button class="btn-icon" data-action="anular-venta" data-id="${v.id}" title="Anular venta">↩️</button>` : '';
+      return `<div class="venta-fila"><span>${hora} ${metodoIcon}</span><span class="venta-fila__desc">${desc}</span><span>$${v.total}</span>${anularBtn}</div>`;
     }).join('');
     return `<details class="historial-dia" ${esHoy ? 'open' : ''}>
       <summary>${esHoy ? '⭐ Hoy' : fecha} — $${totalDia} (${ventasDia.length} ventas)</summary>
@@ -134,6 +135,20 @@ function renderPorFecha(ventas, items, el) {
       ${filas}
     </details>`;
   }).join('') || '<p class="inv-empty">Todavía no hay ventas</p>';
+
+  el.querySelectorAll('[data-action="anular-venta"]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const { confirmDialog } = await import('./ui.js');
+      const ok = await confirmDialog('¿Anular esta venta? Se repone el stock y los insumos, y queda registrada como anulada.');
+      if (!ok) return;
+      const motivo = prompt('Motivo (opcional):') || null;
+      const { error } = await supabase.rpc('anular_venta', { p_venta_id: btn.dataset.id, p_motivo: motivo });
+      const { toast } = await import('./ui.js');
+      if (error) { toast(`No se pudo anular: ${error.message}`); return; }
+      toast('Venta anulada — stock repuesto');
+      render(feria, containerRaiz); // recargar todo el reporte
+    });
+  });
 }
 
 function renderTopProductos(items, comboItems, el) {

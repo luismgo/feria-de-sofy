@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient.js';
-import { confirmDialog, toast } from './ui.js';
+import { toast } from './ui.js';
 import { isOnline } from './connection.js';
 
 let realtimeChannel = null;
