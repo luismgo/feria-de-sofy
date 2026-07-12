@@ -1,5 +1,7 @@
 :root {
   --accent: #E0703F;
+  --accent-strong: #B4531F; /* texto de precio y CTA — ~5:1 sobre fondo blanco de .producto-card/.carrito-panel (AA) */
+  --accent-text: #FFFFFF;
   --bg: #FBDFC5;
   --white: #FFFFFF;
   --text: #5C3A26;
@@ -29,8 +31,8 @@ body {
   border: none;
   border-radius: var(--radius);
   padding: 12px 20px;
-  background: var(--accent);
-  color: white;
+  background: var(--accent-strong);
+  color: var(--accent-text);
   cursor: pointer;
   box-shadow: var(--shadow);
 }
@@ -107,7 +109,7 @@ body {
 .producto-card img { width: 100%; height: 80px; object-fit: cover; border-radius: 8px; }
 .producto-card__sin-foto { font-size: 2rem; }
 .producto-card__nombre { font-weight: 600; font-size: 0.9rem; text-align: center; }
-.producto-card__precio { color: var(--accent); font-weight: 700; }
+.producto-card__precio { color: var(--accent-strong); font-weight: 700; }
 .producto-card__stock { font-size: 0.75rem; opacity: 0.7; }
 .producto-card--sin-precio { border: 2px dashed var(--accent); opacity: 0.85; }
 .producto-card__poner-precio { font-size: 0.75rem; color: var(--accent-strong, var(--accent)); font-weight: 600; text-align: center; }
@@ -155,3 +157,5 @@ h1, h2 { color: var(--text); }
 
 .inv-row__foto { width: 36px; height: 36px; object-fit: cover; border-radius: 8px; }
 .inv-hint { font-size: 0.85rem; opacity: 0.7; margin-top: -8px; }
+
+button:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }

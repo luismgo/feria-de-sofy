@@ -8,6 +8,8 @@ let clientVentaIdPendiente = null;
 let descuentoActual = 0;
 let filtroBusqueda = '';
 let rankingCongelado = []; // ids de producto ordenados por más vendidos, calculado 1 vez por sesión de feria
+let feriaProductosActuales = [];
+let combosActuales = [];
 
 export function initVender(feria) {
   carrito = [];
@@ -16,6 +18,8 @@ export function initVender(feria) {
   descuentoActual = 0;
   filtroBusqueda = '';
   rankingCongelado = [];
+  feriaProductosActuales = [];
+  combosActuales = [];
   const container = document.getElementById('tab-vender');
   container.innerHTML = '<p>Cargando productos...</p>';
 
@@ -48,7 +52,9 @@ async function loadAndRender(feria, container) {
     return;
   }
 
-  render(feria, feriaProductos || [], combos || [], container);
+  feriaProductosActuales = feriaProductos || [];
+  combosActuales = combos || [];
+  render(feria, feriaProductosActuales, combosActuales, container);
 }
 
 function precioEfectivo(fp) {
@@ -163,10 +169,7 @@ function agregarProductoAlCarrito(producto, precio, feria, container) {
 
 function refrescarCarrito(feria, container) {
   clientVentaIdPendiente = null; // el carrito cambió => nueva venta lógica
-  const viejo = container.querySelector('#carrito-panel');
-  const nuevo = renderCarrito(feria, container);
-  if (viejo) viejo.replaceWith(nuevo);
-  loadAndRender(feria, container); // recalcula "disponible" de cada card contra el carrito actualizado
+  render(feria, feriaProductosActuales, combosActuales, container); // recalcula "Disponible" en cliente, sin round-trip
 }
 
 function renderCarrito(feria, container) {
