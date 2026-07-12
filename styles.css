@@ -117,6 +117,9 @@ body {
 }
 .carrito-linea { display: flex; justify-content: space-between; padding: 4px 0; }
 .carrito-total { font-weight: 700; font-size: 1.1rem; }
+.carrito-pago { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 8px 0; font-size: 0.9rem; }
+.pago-btn { background: white; color: var(--text); box-shadow: none; border: 2px solid #DDE3F5; padding: 6px 10px; font-size: 0.85rem; }
+.pago-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
 .carrito-actions { display: flex; gap: 8px; }
 .combo-picker-grid { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; max-height: 200px; overflow-y: auto; }
 .combo-picker-item { background: white; color: var(--text); border: 2px solid #DDE3F5; box-shadow: none; }

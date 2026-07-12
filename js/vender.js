@@ -3,9 +3,13 @@ import { confirmDialog, toast } from './ui.js';
 
 let realtimeChannel = null;
 let carrito = []; // { tipo: 'producto', productoId, nombre, precio, cantidad } | { tipo: 'combo', comboId, nombre, precio, productos: [{id, nombre}] }
+let metodoPagoActual = 'efectivo';
+let clientVentaIdPendiente = null;
 
 export function initVender(feria) {
   carrito = [];
+  metodoPagoActual = 'efectivo';
+  clientVentaIdPendiente = null;
   const container = document.getElementById('tab-vender');
   container.innerHTML = '<p>Cargando productos...</p>';
 
@@ -104,6 +108,7 @@ function agregarProductoAlCarrito(producto, precio, feria, container) {
 }
 
 function refrescarCarrito(feria, container) {
+  clientVentaIdPendiente = null; // el carrito cambió => nueva venta lógica
   const viejo = container.querySelector('#carrito-panel');
   const nuevo = renderCarrito(feria, container);
   if (viejo) viejo.replaceWith(nuevo);
@@ -128,6 +133,14 @@ function renderCarrito(feria, container) {
       `).join('') || '<p class="inv-empty">Carrito vacío</p>'}
     </div>
     <p class="carrito-total">Total: $${total}</p>
+    <div class="carrito-pago">
+      <span>Pago:</span>
+      ${['efectivo', 'transferencia', 'otro'].map((m) => `
+        <button type="button" class="pago-btn ${metodoPagoActual === m ? 'active' : ''}" data-metodo="${m}">
+          ${m === 'efectivo' ? '💵 Efectivo' : m === 'transferencia' ? '📲 Transfer' : '🔵 Otro'}
+        </button>
+      `).join('')}
+    </div>
     <div class="carrito-actions">
       <button class="btn btn--secondary" id="btn-vaciar-carrito" ${carrito.length === 0 ? 'disabled' : ''}>Vaciar</button>
       <button class="btn" id="btn-confirmar-venta" ${carrito.length === 0 ? 'disabled' : ''}>Confirmar venta</button>
@@ -146,33 +159,65 @@ function renderCarrito(feria, container) {
     refrescarCarrito(feria, container);
   });
 
+  panel.querySelectorAll('.pago-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      metodoPagoActual = btn.dataset.metodo;
+      panel.querySelectorAll('.pago-btn').forEach((b) => b.classList.toggle('active', b.dataset.metodo === metodoPagoActual));
+    });
+  });
+
   panel.querySelector('#btn-confirmar-venta').addEventListener('click', async () => {
     if (!navigator.onLine) {
       toast('Sin conexión — no se puede confirmar la venta ahora');
       return;
     }
 
-    const total = carrito.reduce((sum, l) => sum + l.precio * (l.tipo === 'producto' ? l.cantidad : 1), 0);
-    const ok = await confirmDialog(`¿Confirmar venta por un total de $${total}?`);
-    if (!ok) return;
-
     const btn = panel.querySelector('#btn-confirmar-venta');
     btn.disabled = true;
+    btn.textContent = 'Confirmando...';
+
+    // idempotencia: un id estable por carrito; si reintentás, no se cobra dos veces
+    if (!clientVentaIdPendiente) clientVentaIdPendiente = crypto.randomUUID();
 
     const items = carrito.map((l) => l.tipo === 'producto'
       ? { tipo: 'producto', producto_id: l.productoId, cantidad: l.cantidad }
       : { tipo: 'combo', combo_id: l.comboId, producto_ids: l.productos.map((p) => p.id) }
     );
 
-    const { data, error } = await supabase.rpc('confirmar_venta', { p_feria_id: feria.id, p_items: items });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
+    let data, error;
+    try {
+      ({ data, error } = await supabase
+        .rpc('confirmar_venta', {
+          p_feria_id: feria.id,
+          p_items: items,
+          p_metodo_pago: metodoPagoActual,
+          p_client_venta_id: clientVentaIdPendiente,
+        })
+        .abortSignal(controller.signal));
+    } catch (e) {
+      error = { message: 'timeout' };
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    btn.disabled = false;
+    btn.textContent = 'Confirmar venta';
 
     if (error) {
-      btn.disabled = false;
-      toast(`No se pudo confirmar la venta: ${error.message}`);
+      if (error.message === 'timeout' || /abort/i.test(error.message || '')) {
+        toast('La red está lenta. Tocá de nuevo para reintentar — no se cobra dos veces.');
+      } else {
+        toast(`No se pudo confirmar la venta: ${error.message}`);
+      }
       return;
     }
 
     carrito = [];
+    clientVentaIdPendiente = null;
+    metodoPagoActual = 'efectivo';
     if (window.confetti) window.confetti({ particleCount: 120, spread: 80, origin: { y: 0.7 } });
     toast(`¡Venta registrada! 🎉 Total: $${data[0].total}`);
     loadAndRender(feria, container);
