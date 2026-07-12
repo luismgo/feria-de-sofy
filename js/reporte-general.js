@@ -11,9 +11,9 @@ export async function initReporteGeneral({ onVolver }) {
     onVolver();
   };
 
-  const { data: ferias } = await supabase.from('ferias').select('*').order('nombre');
+  const { data: ferias, error: feriasError } = await supabase.from('ferias').select('*').order('nombre');
   const { data: ventas, error: ventasError } = await supabase.from('ventas').select('feria_id, total').eq('anulada', false);
-  if (ventasError) {
+  if (feriasError || ventasError) {
     content.innerHTML = '<p class="error">No se pudo cargar el reporte general — revisá la conexión</p>';
     return;
   }
