@@ -94,6 +94,8 @@ body {
 .inv-empty { opacity: 0.6; font-style: italic; }
 .inv-form { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .inv-form input, .inv-form select { flex: 1; min-width: 100px; padding: 8px; border-radius: 8px; border: 1px solid #DDE3F5; font-family: inherit; }
+.inv-mini-label { display: inline-flex; align-items: center; gap: 4px; font-size: 0.75rem; opacity: 0.8; }
+.inv-mini-label input { width: 64px; }
 .btn-icon { background: none; box-shadow: none; padding: 4px 8px; font-size: 1.1rem; }
 
 .combos-row { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 12px; }

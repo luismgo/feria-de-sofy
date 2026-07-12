@@ -16,6 +16,7 @@ export async function renderInsumosSection(container) {
     <form id="form-insumo" class="inv-form">
       <input name="nombre" placeholder="Nombre (ej: Bolsita transparente)" required />
       <input name="stock" type="number" min="0" placeholder="Stock inicial" required />
+      <input name="costo" type="number" min="0" step="1" placeholder="Costo $" value="0" />
       <button type="submit">Agregar insumo</button>
     </form>
   `;
@@ -24,7 +25,8 @@ export async function renderInsumosSection(container) {
   list.innerHTML = insumos.map((i) => `
     <div class="inv-row" data-id="${i.id}">
       <span>${i.nombre}</span>
-      <input type="number" class="insumo-stock-input" data-id="${i.id}" value="${i.stock}" min="0" />
+      <label class="inv-mini-label">Stock <input type="number" class="insumo-stock-input" data-id="${i.id}" value="${i.stock}" min="0" /></label>
+      <label class="inv-mini-label">Costo $<input type="number" class="insumo-costo-input" data-id="${i.id}" value="${i.costo ?? 0}" min="0" step="1" /></label>
       <button class="btn-icon" data-action="eliminar-insumo" data-id="${i.id}">🗑️</button>
     </div>
   `).join('') || '<p class="inv-empty">Todavía no hay insumos</p>';
@@ -32,6 +34,12 @@ export async function renderInsumosSection(container) {
   list.querySelectorAll('.insumo-stock-input').forEach((input) => {
     input.addEventListener('change', async () => {
       await supabase.from('insumos').update({ stock: Number(input.value) }).eq('id', input.dataset.id);
+    });
+  });
+
+  list.querySelectorAll('.insumo-costo-input').forEach((input) => {
+    input.addEventListener('change', async () => {
+      await supabase.from('insumos').update({ costo: Number(input.value) }).eq('id', input.dataset.id);
     });
   });
 
@@ -47,7 +55,7 @@ export async function renderInsumosSection(container) {
   container.querySelector('#form-insumo').addEventListener('submit', async (e) => {
     e.preventDefault();
     const form = e.target;
-    await supabase.from('insumos').insert({ nombre: form.nombre.value.trim(), stock: Number(form.stock.value) });
+    await supabase.from('insumos').insert({ nombre: form.nombre.value.trim(), stock: Number(form.stock.value), costo: Number(form.costo.value || 0) });
     renderInsumosSection(container);
   });
 }

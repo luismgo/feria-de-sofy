@@ -85,7 +85,7 @@ async function render(feria, container) {
 
   const { data: productos } = await supabase
     .from('feria_productos')
-    .select('id, categoria_precio_id, precio_override, productos(id, nombre, imagen_url, stock)')
+    .select('id, categoria_precio_id, precio_override, productos(id, nombre, imagen_url, stock, costo)')
     .eq('feria_id', feria.id);
 
   renderProductos(feria, productos || [], categorias, container);
@@ -201,7 +201,8 @@ function renderProductos(feria, feriaProductos, categorias, container) {
       <div class="inv-row" data-id="${fp.id}">
         ${p.imagen_url ? `<img class="inv-row__foto" src="${p.imagen_url}" alt="${p.nombre}" />` : ''}
         <span>${p.nombre} — ${precioTexto} — Stock: ${p.stock}</span>
-        <input type="number" class="inv-stock-input" data-producto-id="${p.id}" value="${p.stock}" min="0" />
+        <label class="inv-mini-label">Stock <input type="number" class="inv-stock-input" data-producto-id="${p.id}" value="${p.stock}" min="0" /></label>
+        <label class="inv-mini-label">Costo $<input type="number" class="inv-costo-input" data-producto-id="${p.id}" value="${p.costo ?? 0}" min="0" step="1" /></label>
         <select class="inv-categoria-select" data-id="${fp.id}">
           <option value="">Sin categoría</option>
           ${categorias.map((c) => `<option value="${c.id}" ${fp.categoria_precio_id === c.id ? 'selected' : ''}>${c.nombre}</option>`).join('')}
@@ -216,6 +217,13 @@ function renderProductos(feria, feriaProductos, categorias, container) {
   list.querySelectorAll('.inv-stock-input').forEach((input) => {
     input.addEventListener('change', async () => {
       await supabase.from('productos').update({ stock: Number(input.value) }).eq('id', input.dataset.productoId);
+      render(feria, container);
+    });
+  });
+
+  list.querySelectorAll('.inv-costo-input').forEach((input) => {
+    input.addEventListener('change', async () => {
+      await supabase.from('productos').update({ costo: Number(input.value) }).eq('id', input.dataset.productoId);
       render(feria, container);
     });
   });
