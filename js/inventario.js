@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient.js';
-import { confirmDialog, toast, mutar } from './ui.js';
+import { confirmDialog, toast, mutar, escapeHtml, formatMoney, uuid } from './ui.js';
 import { renderInsumosSection, abrirRecetaModal } from './insumos.js';
 
 export function initInventario(feria) {
@@ -10,10 +10,15 @@ export function initInventario(feria) {
 }
 
 async function render(feria, container) {
-  const [{ data: categorias }, { data: combos }] = await Promise.all([
+  const [{ data: categorias, error: catError }, { data: combos, error: comboError }] = await Promise.all([
     supabase.from('categorias_precio').select('*').eq('feria_id', feria.id).order('orden'),
     supabase.from('combos').select('*').eq('feria_id', feria.id).order('nombre'),
   ]);
+
+  if (catError || comboError) {
+    container.innerHTML = '<p class="error">No se pudo cargar el inventario — revisá la conexión</p>';
+    return;
+  }
 
   container.innerHTML = `
     <section class="inv-section">
@@ -46,7 +51,7 @@ async function render(feria, container) {
         <input name="nombre" placeholder="Nombre del producto" required />
         <select name="categoria_precio_id">
           <option value="">Sin categoría</option>
-          ${categorias.map((c) => `<option value="${c.id}">${c.nombre} ($${c.precio})</option>`).join('')}
+          ${categorias.map((c) => `<option value="${c.id}">${escapeHtml(c.nombre)} (${formatMoney(c.precio)})</option>`).join('')}
         </select>
         <input name="stock" type="number" min="0" placeholder="Stock inicial" required />
         <input name="foto" type="file" accept="image/*" />
@@ -64,24 +69,30 @@ async function render(feria, container) {
   container.querySelector('#form-categoria').addEventListener('submit', async (e) => {
     e.preventDefault();
     const form = e.target;
-    await supabase.from('categorias_precio').insert({
+    const submitBtn = form.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    const { error } = await mutar(supabase.from('categorias_precio').insert({
       feria_id: feria.id,
       nombre: form.nombre.value.trim(),
       precio: Number(form.precio.value),
       orden: categorias.length,
-    });
+    }), 'No se pudo crear la categoría');
+    if (error) { submitBtn.disabled = false; return; }
     render(feria, container);
   });
 
   container.querySelector('#form-combo').addEventListener('submit', async (e) => {
     e.preventDefault();
     const form = e.target;
-    await supabase.from('combos').insert({
+    const submitBtn = form.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    const { error } = await mutar(supabase.from('combos').insert({
       feria_id: feria.id,
       nombre: form.nombre.value.trim(),
       cantidad: Number(form.cantidad.value),
       precio: Number(form.precio.value),
-    });
+    }), 'No se pudo crear el combo');
+    if (error) { submitBtn.disabled = false; return; }
     render(feria, container);
   });
 
@@ -104,7 +115,7 @@ async function render(feria, container) {
     let imagen_url = null;
     const file = form.foto.files[0];
     if (file) {
-      const path = `${crypto.randomUUID()}-${file.name}`;
+      const path = `${uuid()}-${file.name}`;
       const { error: uploadError } = await supabase.storage.from('productos-fotos').upload(path, file);
       if (!uploadError) {
         imagen_url = supabase.storage.from('productos-fotos').getPublicUrl(path).data.publicUrl;
@@ -150,13 +161,13 @@ function renderCategorias(feria, categorias, container) {
   list.innerHTML = categorias.map((c) => `
     <div class="inv-row" data-id="${c.id}">
       <span>${c.nombre} — $${c.precio}</span>
-      <button class="btn-icon" data-action="eliminar-categoria" data-id="${c.id}" title="Eliminar esta categoría de precio">🗑️</button>
+      <button class="btn-accion btn-accion--peligro" data-action="eliminar-categoria" data-id="${c.id}" title="Eliminar esta categoría de precio">🗑️ Eliminar</button>
     </div>
   `).join('') || '<p class="inv-empty">Todavía no hay categorías de precio</p>';
 
   list.querySelectorAll('[data-action="eliminar-categoria"]').forEach((btn) => {
     btn.addEventListener('click', async () => {
-      const ok = await confirmDialog('¿Eliminar esta categoría de precio? Los productos que la usan quedarán sin categoría.');
+      const ok = await confirmDialog('¿Eliminar esta categoría de precio? Los productos que la usan quedarán sin categoría.', { peligro: true });
       if (!ok) return;
       await supabase.from('categorias_precio').delete().eq('id', btn.dataset.id);
       render(feria, container);
@@ -168,9 +179,11 @@ function renderCombos(feria, combos, container) {
   const list = container.querySelector('#inv-combos');
   list.innerHTML = combos.map((c) => `
     <div class="inv-row" data-id="${c.id}">
-      <span>${c.nombre} — ${c.cantidad} productos por $${c.precio} ${c.activo ? '' : '(inactivo)'}</span>
-      <button class="btn-icon" data-action="toggle-combo" data-id="${c.id}" data-activo="${c.activo}" title="${c.activo ? 'Pausar combo (deja de aparecer al vender)' : 'Activar combo'}">${c.activo ? '⏸️' : '▶️'}</button>
-      <button class="btn-icon" data-action="eliminar-combo" data-id="${c.id}" title="Eliminar este combo">🗑️</button>
+      <span>${c.nombre} — ${c.cantidad} productos por $${c.precio}${c.activo ? '' : ' (en pausa)'}</span>
+      <div class="inv-row__acciones">
+        <button class="btn-accion" data-action="toggle-combo" data-id="${c.id}" data-activo="${c.activo}" title="${c.activo ? 'Deja de aparecer al vender' : 'Vuelve a aparecer al vender'}">${c.activo ? '⏸️ Pausar' : '▶️ Activar'}</button>
+        <button class="btn-accion btn-accion--peligro" data-action="eliminar-combo" data-id="${c.id}" title="Eliminar este combo">🗑️ Eliminar</button>
+      </div>
     </div>
   `).join('') || '<p class="inv-empty">Todavía no hay combos</p>';
 
@@ -183,7 +196,7 @@ function renderCombos(feria, combos, container) {
 
   list.querySelectorAll('[data-action="eliminar-combo"]').forEach((btn) => {
     btn.addEventListener('click', async () => {
-      const ok = await confirmDialog('¿Eliminar este combo?');
+      const ok = await confirmDialog('¿Eliminar este combo?', { peligro: true });
       if (!ok) return;
       await supabase.from('combos').delete().eq('id', btn.dataset.id);
       render(feria, container);
@@ -196,44 +209,76 @@ function renderProductos(feria, feriaProductos, categorias, container) {
   list.innerHTML = feriaProductos.map((fp) => {
     const p = fp.productos;
     const categoria = categorias.find((c) => c.id === fp.categoria_precio_id);
-    const precioTexto = fp.precio_override != null
-      ? `$${fp.precio_override} (override)`
-      : categoria ? `$${categoria.precio} (${categoria.nombre})` : 'sin precio';
+    const precio = fp.precio_override != null ? fp.precio_override : (categoria ? categoria.precio : null);
+    const precioBadge = precio != null
+      ? `<span class="inv-producto__precio">${formatMoney(precio)}</span>`
+      : `<span class="inv-producto__precio inv-producto__precio--sin">Sin precio</span>`;
     return `
-      <div class="inv-row" data-id="${fp.id}">
-        ${p.imagen_url ? `<img class="inv-row__foto" src="${p.imagen_url}" alt="${p.nombre}" />` : ''}
-        <span>${p.nombre} — ${precioTexto} — Stock: ${p.stock}</span>
-        <label class="inv-mini-label">Stock <input type="number" class="inv-stock-input" data-producto-id="${p.id}" value="${p.stock}" min="0" /></label>
-        <label class="inv-mini-label">Costo $<input type="number" class="inv-costo-input" data-producto-id="${p.id}" value="${p.costo ?? 0}" min="0" step="1" /></label>
-        <select class="inv-categoria-select" data-id="${fp.id}">
-          <option value="">Sin categoría</option>
-          ${categorias.map((c) => `<option value="${c.id}" ${fp.categoria_precio_id === c.id ? 'selected' : ''}>${c.nombre}</option>`).join('')}
-        </select>
-        <button class="btn-icon" data-action="ver-receta" data-producto-id="${p.id}" data-producto-nombre="${p.nombre}" title="Ver o editar la receta (insumos que gasta este producto)">🧪</button>
-        <button class="btn-icon" data-action="quitar-de-feria" data-id="${fp.id}" title="Quitar de esta feria (sigue existiendo en las demás)">➖</button>
-        <button class="btn-icon" data-action="eliminar-producto" data-producto-id="${p.id}" title="Eliminar el producto de TODAS las ferias">🗑️</button>
+      <div class="inv-producto" data-id="${fp.id}" data-override="${fp.precio_override ?? ''}">
+        <div class="inv-producto__head">
+          ${p.imagen_url ? `<img class="inv-row__foto" src="${p.imagen_url}" alt="${escapeHtml(p.nombre)}" />` : ''}
+          <span class="inv-producto__nombre">${escapeHtml(p.nombre)}</span>
+          ${precioBadge}
+        </div>
+        <div class="inv-producto__controls">
+          <label class="inv-mini-label">Stock <input type="number" class="inv-stock-input" data-producto-id="${p.id}" value="${p.stock}" min="0" /></label>
+          <label class="inv-mini-label">Costo $ <input type="number" class="inv-costo-input" data-producto-id="${p.id}" value="${p.costo ?? 0}" min="0" step="1" /></label>
+          <label class="inv-mini-label">Categoría
+            <select class="inv-categoria-select" data-id="${fp.id}">
+              <option value="">Sin categoría</option>
+              ${categorias.map((c) => `<option value="${c.id}" ${fp.categoria_precio_id === c.id ? 'selected' : ''}>${escapeHtml(c.nombre)} — ${formatMoney(c.precio)}</option>`).join('')}
+            </select>
+          </label>
+        </div>
+        <div class="inv-producto__acciones">
+          <button class="btn-accion" data-action="ver-receta" data-producto-id="${p.id}" data-producto-nombre="${escapeHtml(p.nombre)}" title="Insumos que gasta este producto al venderse">🧪 Receta</button>
+          <button class="btn-accion" data-action="quitar-de-feria" data-id="${fp.id}" title="Se quita de esta feria; sigue en las demás">➖ Quitar de la feria</button>
+          <button class="btn-accion btn-accion--peligro" data-action="eliminar-producto" data-producto-id="${p.id}" title="Borra el producto de TODAS las ferias">🗑️ Eliminar</button>
+        </div>
       </div>
     `;
   }).join('') || '<p class="inv-empty">Todavía no hay productos en esta feria</p>';
 
   list.querySelectorAll('.inv-stock-input').forEach((input) => {
     input.addEventListener('change', async () => {
-      await mutar(supabase.from('productos').update({ stock: Number(input.value) }).eq('id', input.dataset.productoId), 'No se pudo actualizar el stock');
-      render(feria, container);
+      const val = Number(input.value);
+      if (input.value === '' || !Number.isFinite(val) || val < 0) {
+        toast('Poné un stock válido (0 o más).');
+        input.value = input.defaultValue;
+        return;
+      }
+      const { error } = await mutar(supabase.from('productos').update({ stock: val }).eq('id', input.dataset.productoId), 'No se pudo actualizar el stock');
+      if (!error) input.defaultValue = String(val); // el input ya muestra el valor; no re-render (para no perder foco/scroll)
     });
   });
 
   list.querySelectorAll('.inv-costo-input').forEach((input) => {
     input.addEventListener('change', async () => {
-      await mutar(supabase.from('productos').update({ costo: Number(input.value) }).eq('id', input.dataset.productoId), 'No se pudo actualizar el costo');
-      render(feria, container);
+      const val = Number(input.value);
+      if (input.value === '' || !Number.isFinite(val) || val < 0) {
+        toast('Poné un costo válido (0 o más).');
+        input.value = input.defaultValue;
+        return;
+      }
+      const { error } = await mutar(supabase.from('productos').update({ costo: val }).eq('id', input.dataset.productoId), 'No se pudo actualizar el costo');
+      if (!error) input.defaultValue = String(val);
     });
   });
 
   list.querySelectorAll('.inv-categoria-select').forEach((select) => {
     select.addEventListener('change', async () => {
-      await mutar(supabase.from('feria_productos').update({ categoria_precio_id: select.value || null }).eq('id', select.dataset.id), 'No se pudo actualizar la categoría');
-      render(feria, container);
+      const { error } = await mutar(supabase.from('feria_productos').update({ categoria_precio_id: select.value || null }).eq('id', select.dataset.id), 'No se pudo actualizar la categoría');
+      if (error) return;
+      // Actualizar el badge de precio de esta fila en el lugar, sin re-render (respeta un precio_override si lo hay).
+      const fila = select.closest('.inv-producto');
+      const badge = fila?.querySelector('.inv-producto__precio');
+      const override = fila?.dataset.override;
+      const cat = categorias.find((c) => c.id === select.value);
+      const efectivo = (override != null && override !== '') ? Number(override) : (cat ? cat.precio : null);
+      if (badge) {
+        badge.textContent = efectivo != null ? formatMoney(efectivo) : 'Sin precio';
+        badge.classList.toggle('inv-producto__precio--sin', efectivo == null);
+      }
     });
   });
 
@@ -254,7 +299,7 @@ function renderProductos(feria, feriaProductos, categorias, container) {
 
   list.querySelectorAll('[data-action="eliminar-producto"]').forEach((btn) => {
     btn.addEventListener('click', async () => {
-      const ok = await confirmDialog('¿Eliminar este producto por completo, de TODAS las ferias que lo usan? Las ventas ya registradas se conservan.');
+      const ok = await confirmDialog('¿Eliminar este producto por completo, de TODAS las ferias que lo usan? Las ventas ya registradas se conservan.', { peligro: true });
       if (!ok) return;
       await supabase.from('productos').delete().eq('id', btn.dataset.productoId);
       render(feria, container);
@@ -275,7 +320,7 @@ async function abrirReutilizarModal(feriaActual, categoriasActuales, container) 
     <div class="modal">
       <p>Elegí de cuál feria traer productos:</p>
       <select id="reutilizar-feria-select">
-        ${otrasFerias.map((f) => `<option value="${f.id}">${f.emoji} ${f.nombre}</option>`).join('')}
+        ${otrasFerias.map((f) => `<option value="${f.id}">${escapeHtml(f.emoji)} ${escapeHtml(f.nombre)}</option>`).join('')}
       </select>
       <div id="reutilizar-productos-list" class="inv-list"></div>
       <div class="modal-actions">
@@ -298,8 +343,8 @@ async function abrirReutilizarModal(feriaActual, categoriasActuales, container) 
     const list = overlay.querySelector('#reutilizar-productos-list');
     list.innerHTML = disponibles.map((fp) => `
       <div class="inv-row">
-        <span>${fp.productos.nombre} (stock: ${fp.productos.stock})</span>
-        <button class="btn-icon" data-action="agregar-producto" data-id="${fp.productos.id}" title="Traer este producto a esta feria">➕</button>
+        <span>${escapeHtml(fp.productos.nombre)} (stock: ${fp.productos.stock})</span>
+        <button class="btn-accion" data-action="agregar-producto" data-id="${fp.productos.id}" title="Traer este producto a esta feria">➕ Traer</button>
       </div>
     `).join('') || '<p class="inv-empty">No hay productos nuevos para traer de esa feria</p>';
 

@@ -7,11 +7,17 @@ export function initAuth(onSignedIn) {
   const message = document.getElementById('login-message');
   const submitBtn = form.querySelector('button');
 
+  // Entrar a la app una sola vez por sesión: onAuthStateChange también dispara en
+  // TOKEN_REFRESHED / USER_UPDATED, y re-ejecutar onSignedIn ahí sacaría a Sofy al
+  // selector de feria y le vaciaría el carrito a mitad de venta.
+  let entered = false;
   supabase.auth.onAuthStateChange((_event, session) => {
-    if (session) {
+    if (session && !entered) {
+      entered = true;
       screen.classList.add('hidden');
       onSignedIn(session);
-    } else {
+    } else if (!session) {
+      entered = false;
       screen.classList.remove('hidden');
     }
   });

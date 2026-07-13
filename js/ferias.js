@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient.js';
-import { toast } from './ui.js';
+import { toast, escapeHtml, promptDialog } from './ui.js';
 
 function slugify(nombre) {
   return nombre.toLowerCase().trim().normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -15,9 +15,9 @@ export async function initFeriaSelector(onSelect) {
   await render();
 
   btnNueva.onclick = async () => {
-    const nombre = prompt('Nombre de la nueva feria:');
+    const nombre = await promptDialog('Nombre de la nueva feria:', { placeholder: 'Ej: Feria de primavera', okLabel: 'Siguiente' });
     if (!nombre || !nombre.trim()) return;
-    const emoji = prompt('Un emoji para representarla (ej: 🌸):', '🌸') || '🌸';
+    const emoji = (await promptDialog('Un emoji para representarla:', { value: '🌸', okLabel: 'Crear feria' })) || '🌸';
     const { error } = await supabase.from('ferias').insert({ nombre: nombre.trim(), emoji: emoji.trim(), slug: slugify(nombre) });
     if (error) {
       toast('No se pudo crear la feria');
@@ -38,7 +38,7 @@ export async function initFeriaSelector(onSelect) {
     ferias.forEach((feria) => {
       const card = document.createElement('button');
       card.className = 'feria-card';
-      card.innerHTML = `<span class="feria-card__emoji">${feria.emoji}</span><span class="feria-card__nombre">${feria.nombre}</span>`;
+      card.innerHTML = `<span class="feria-card__emoji">${escapeHtml(feria.emoji)}</span><span class="feria-card__nombre">${escapeHtml(feria.nombre)}</span>`;
       card.addEventListener('click', () => {
         screen.classList.add('hidden');
         onSelect(feria);

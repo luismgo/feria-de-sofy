@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient.js';
+import { escapeHtml, formatMoney } from './ui.js';
 
 export async function initReporteGeneral({ onVolver }) {
   const screen = document.getElementById('reporte-general');
@@ -32,14 +33,14 @@ export async function initReporteGeneral({ onVolver }) {
   content.innerHTML = `
     <section class="inv-section">
       <h2>Total combinado</h2>
-      <p class="carrito-total">$${totalGeneral} — ${cantidadGeneral} ventas</p>
+      <p class="carrito-total">${formatMoney(totalGeneral)} — ${cantidadGeneral} ventas</p>
     </section>
     <section class="inv-section">
       <h2>Por feria</h2>
       ${Object.values(porFeria).map((r) => `
         <div class="inv-row">
-          <span>${r.feria.emoji} ${r.feria.nombre}</span>
-          <span>$${r.total} (${r.cantidad} ventas)</span>
+          <span>${escapeHtml(r.feria.emoji)} ${escapeHtml(r.feria.nombre)}</span>
+          <span>${formatMoney(r.total)} (${r.cantidad} ventas)</span>
         </div>
       `).join('') || '<p class="inv-empty">Todavía no hay ferias</p>'}
     </section>

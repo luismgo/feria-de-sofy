@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient.js';
-import { confirmDialog, mutar } from './ui.js';
+import { confirmDialog, mutar, toast, escapeHtml } from './ui.js';
 
 export async function fetchInsumos() {
   const { data } = await supabase.from('insumos').select('*').order('nombre');
@@ -24,30 +24,45 @@ export async function renderInsumosSection(container) {
   const list = container.querySelector('#inv-insumos');
   list.innerHTML = insumos.map((i) => `
     <div class="inv-row" data-id="${i.id}">
-      <span>${i.nombre}</span>
+      <span>${escapeHtml(i.nombre)}</span>
       <label class="inv-mini-label">Stock <input type="number" class="insumo-stock-input" data-id="${i.id}" value="${i.stock}" min="0" /></label>
       <label class="inv-mini-label">Costo $<input type="number" class="insumo-costo-input" data-id="${i.id}" value="${i.costo ?? 0}" min="0" step="1" /></label>
-      <button class="btn-icon" data-action="eliminar-insumo" data-id="${i.id}" title="Eliminar este insumo">🗑️</button>
+      <button class="btn-accion btn-accion--peligro" data-action="eliminar-insumo" data-id="${i.id}" title="Eliminar este insumo">🗑️ Eliminar</button>
     </div>
   `).join('') || '<p class="inv-empty">Todavía no hay insumos</p>';
 
   list.querySelectorAll('.insumo-stock-input').forEach((input) => {
     input.addEventListener('change', async () => {
-      await mutar(supabase.from('insumos').update({ stock: Number(input.value) }).eq('id', input.dataset.id), 'No se pudo actualizar el stock del insumo');
+      const val = Number(input.value);
+      if (input.value === '' || !Number.isFinite(val) || val < 0) {
+        toast('Poné un stock válido (0 o más).');
+        input.value = input.defaultValue;
+        return;
+      }
+      const { error } = await mutar(supabase.from('insumos').update({ stock: val }).eq('id', input.dataset.id), 'No se pudo actualizar el stock del insumo');
+      if (!error) input.defaultValue = String(val);
     });
   });
 
   list.querySelectorAll('.insumo-costo-input').forEach((input) => {
     input.addEventListener('change', async () => {
-      await mutar(supabase.from('insumos').update({ costo: Number(input.value) }).eq('id', input.dataset.id), 'No se pudo actualizar el costo del insumo');
+      const val = Number(input.value);
+      if (input.value === '' || !Number.isFinite(val) || val < 0) {
+        toast('Poné un costo válido (0 o más).');
+        input.value = input.defaultValue;
+        return;
+      }
+      const { error } = await mutar(supabase.from('insumos').update({ costo: val }).eq('id', input.dataset.id), 'No se pudo actualizar el costo del insumo');
+      if (!error) input.defaultValue = String(val);
     });
   });
 
   list.querySelectorAll('[data-action="eliminar-insumo"]').forEach((btn) => {
     btn.addEventListener('click', async () => {
-      const ok = await confirmDialog('¿Eliminar este insumo? Se quita también de la receta de los productos que lo usaban.');
+      const ok = await confirmDialog('¿Eliminar este insumo? Se quita también de la receta de los productos que lo usaban.', { peligro: true });
       if (!ok) return;
-      await supabase.from('insumos').delete().eq('id', btn.dataset.id);
+      const { error } = await mutar(supabase.from('insumos').delete().eq('id', btn.dataset.id), 'No se pudo eliminar el insumo');
+      if (error) return;
       renderInsumosSection(container);
     });
   });
@@ -55,7 +70,10 @@ export async function renderInsumosSection(container) {
   container.querySelector('#form-insumo').addEventListener('submit', async (e) => {
     e.preventDefault();
     const form = e.target;
-    await supabase.from('insumos').insert({ nombre: form.nombre.value.trim(), stock: Number(form.stock.value), costo: Number(form.costo.value || 0) });
+    const submitBtn = form.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    const { error } = await mutar(supabase.from('insumos').insert({ nombre: form.nombre.value.trim(), stock: Number(form.stock.value), costo: Number(form.costo.value || 0) }), 'No se pudo crear el insumo');
+    if (error) { submitBtn.disabled = false; return; }
     renderInsumosSection(container);
   });
 }
@@ -70,21 +88,21 @@ export async function abrirRecetaModal(producto) {
   function render() {
     overlay.innerHTML = `
       <div class="modal">
-        <p>Receta de "${producto.nombre}" — qué insumos consume por unidad vendida</p>
+        <p>Receta de "${escapeHtml(producto.nombre)}" — qué insumos consume por unidad vendida</p>
         <div id="receta-list" class="inv-list">
           ${receta.map((r) => {
             const insumo = insumos.find((i) => i.id === r.insumo_id);
             return `
               <div class="inv-row">
-                <span>${insumo ? insumo.nombre : '(insumo eliminado)'} x ${r.cantidad}</span>
-                <button class="btn-icon" data-action="quitar-receta" data-id="${r.id}" title="Quitar este insumo de la receta">🗑️</button>
+                <span>${insumo ? escapeHtml(insumo.nombre) : '(insumo eliminado)'} x ${r.cantidad}</span>
+                <button class="btn-accion btn-accion--peligro btn-accion--sm" data-action="quitar-receta" data-id="${r.id}" title="Quitar este insumo de la receta">🗑️ Quitar</button>
               </div>
             `;
           }).join('') || '<p class="inv-empty">Sin insumos asignados todavía</p>'}
         </div>
         <form id="form-agregar-receta" class="inv-form">
           <select name="insumo_id">
-            ${insumos.map((i) => `<option value="${i.id}">${i.nombre}</option>`).join('')}
+            ${insumos.map((i) => `<option value="${i.id}">${escapeHtml(i.nombre)}</option>`).join('')}
           </select>
           <input name="cantidad" type="number" min="1" value="1" placeholder="Cantidad" required />
           <button type="submit">Agregar a la receta</button>
@@ -108,7 +126,8 @@ export async function abrirRecetaModal(producto) {
       return;
     }
     if (e.target.dataset.action === 'quitar-receta') {
-      await supabase.from('producto_insumos').delete().eq('id', e.target.dataset.id);
+      const { error } = await mutar(supabase.from('producto_insumos').delete().eq('id', e.target.dataset.id), 'No se pudo quitar el insumo de la receta');
+      if (error) return;
       const idx = receta.findIndex((r) => r.id === e.target.dataset.id);
       if (idx >= 0) receta.splice(idx, 1);
       render();
@@ -119,11 +138,15 @@ export async function abrirRecetaModal(producto) {
     if (e.target.id !== 'form-agregar-receta') return;
     e.preventDefault();
     const form = e.target;
-    const { data: nueva } = await supabase.from('producto_insumos').upsert({
+    const submitBtn = form.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    const { data: nueva, error } = await supabase.from('producto_insumos').upsert({
       producto_id: producto.id,
       insumo_id: form.insumo_id.value,
       cantidad: Number(form.cantidad.value),
     }, { onConflict: 'producto_id,insumo_id' }).select().single();
+    // Si el upsert falla, `nueva` es null: NO lo metemos al array o el próximo render() crashea con r.insumo_id sobre null.
+    if (error || !nueva) { submitBtn.disabled = false; toast('No se pudo agregar el insumo a la receta'); return; }
     const idx = receta.findIndex((r) => r.insumo_id === form.insumo_id.value);
     if (idx >= 0) receta[idx] = nueva; else receta.push(nueva);
     render();

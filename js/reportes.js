@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient.js';
+import { escapeHtml, formatMoney, promptDialog } from './ui.js';
 
 export function initReportes(feria) {
   const container = document.getElementById('tab-reportes');
@@ -40,6 +41,7 @@ async function render(feria, container) {
   container.innerHTML = `
     <section class="inv-section" id="reporte-cierre">
       <h2>🧾 Cerrar caja (hoy)</h2>
+      <p class="inv-hint">Es una calculadora de arqueo: compará el efectivo esperado con lo que contás en la caja. No corta las ventas ni guarda un cierre — podés revisarla las veces que quieras.</p>
       <div id="cierre-content"></div>
     </section>
     <section class="inv-section">
@@ -70,12 +72,12 @@ function renderCierre(ventas, anuladasHoy, el) {
   ventasHoy.forEach((v) => { por[v.metodo_pago] = (por[v.metodo_pago] || 0) + Number(v.total); });
 
   el.innerHTML = `
-    <div class="cierre-linea"><span>💵 Esperado en efectivo</span><strong>$${por.efectivo}</strong></div>
+    <div class="cierre-linea"><span>💵 Esperado en efectivo</span><strong>${formatMoney(por.efectivo)}</strong></div>
     <div class="cierre-linea"><span>Contado (lo que hay en la caja)</span><input type="number" id="cierre-contado" min="0" placeholder="$" /></div>
     <div class="cierre-linea" id="cierre-diferencia-row"><span>Diferencia</span><strong id="cierre-diferencia">—</strong></div>
     <hr class="cierre-hr" />
-    <div class="cierre-linea"><span>📲 Transferencias</span><strong>$${por.transferencia}</strong></div>
-    <div class="cierre-linea"><span>🔵 Otro (QR)</span><strong>$${por.otro}</strong></div>
+    <div class="cierre-linea"><span>📲 Transferencias</span><strong>${formatMoney(por.transferencia)}</strong></div>
+    <div class="cierre-linea"><span>🔵 Otro (QR)</span><strong>${formatMoney(por.otro)}</strong></div>
     <div class="cierre-linea"><span>Ventas del día</span><strong>${ventasHoy.length}</strong></div>
     <div class="cierre-linea"><span>Anuladas hoy</span><strong>${anuladasHoy}</strong></div>
     <button class="btn" id="btn-cerrar-caja">Cerrar caja 🎉</button>
@@ -86,7 +88,7 @@ function renderCierre(ventas, anuladasHoy, el) {
   contado.addEventListener('input', () => {
     if (contado.value === '') { difEl.textContent = '—'; difEl.className = ''; return; }
     const dif = Number(contado.value) - por.efectivo;
-    difEl.textContent = `${dif === 0 ? '✓ ' : ''}$${dif}`;
+    difEl.textContent = `${dif === 0 ? '✓ ' : ''}${formatMoney(dif)}`;
     difEl.className = dif === 0 ? 'cierre-ok' : 'cierre-diff';
   });
 
@@ -94,11 +96,11 @@ function renderCierre(ventas, anuladasHoy, el) {
     const dif = contado.value === '' ? null : Number(contado.value) - por.efectivo;
     if (window.confetti) window.confetti({ particleCount: 160, spread: 90, origin: { y: 0.6 } });
     if (dif === 0) {
-      import('./ui.js').then((m) => m.toast(`¡Cuadraste! 🎉 $${por.efectivo} en efectivo`));
+      import('./ui.js').then((m) => m.toast(`¡Cuadraste! 🎉 ${formatMoney(por.efectivo)} en efectivo`));
     } else if (dif == null) {
       import('./ui.js').then((m) => m.toast('Caja cerrada 🎉'));
     } else {
-      import('./ui.js').then((m) => m.toast(`Cerrada — diferencia de $${dif} en efectivo`));
+      import('./ui.js').then((m) => m.toast(`Cerrada — diferencia de ${formatMoney(dif)} en efectivo`));
     }
   });
 }
@@ -125,14 +127,14 @@ function renderPorFecha(feria, containerRaiz, ventas, items, el) {
     const esHoy = fecha === hoy;
     const filas = ventasDia.map((v) => {
       const hora = new Date(v.created_at).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
-      const desc = (itemsPorVenta[v.id] || []).map((i) => i.tipo === 'producto' ? `${i.producto_nombre} x${i.cantidad}` : i.producto_nombre).join(', ') || '—';
+      const desc = (itemsPorVenta[v.id] || []).map((i) => i.tipo === 'producto' ? `${escapeHtml(i.producto_nombre)} x${i.cantidad}` : escapeHtml(i.producto_nombre)).join(', ') || '—';
       const metodoIcon = v.metodo_pago === 'efectivo' ? '💵' : v.metodo_pago === 'transferencia' ? '📲' : '🔵';
-      const anularBtn = esHoy ? `<button class="btn-icon" data-action="anular-venta" data-id="${v.id}" title="Anular venta">↩️</button>` : '';
-      return `<div class="venta-fila"><span>${hora} ${metodoIcon}</span><span class="venta-fila__desc">${desc}</span><span>$${v.total}</span>${anularBtn}</div>`;
+      const anularBtn = esHoy ? `<button class="btn-accion btn-accion--peligro btn-accion--sm" data-action="anular-venta" data-id="${v.id}" title="Repone stock e insumos y marca la venta como anulada">↩️ Anular</button>` : '';
+      return `<div class="venta-fila"><span>${hora} ${metodoIcon}</span><span class="venta-fila__desc">${desc}</span><span>${formatMoney(v.total)}</span>${anularBtn}</div>`;
     }).join('');
     return `<details class="historial-dia" ${esHoy ? 'open' : ''}>
-      <summary>${esHoy ? '⭐ Hoy' : fecha} — $${totalDia} (${ventasDia.length} ventas)</summary>
-      <div class="dia-metodos">💵 $${porMetodo.efectivo} · 📲 $${porMetodo.transferencia} · 🔵 $${porMetodo.otro}</div>
+      <summary>${esHoy ? '⭐ Hoy' : fecha} — ${formatMoney(totalDia)} (${ventasDia.length} ventas)</summary>
+      <div class="dia-metodos">💵 ${formatMoney(porMetodo.efectivo)} · 📲 ${formatMoney(porMetodo.transferencia)} · 🔵 ${formatMoney(porMetodo.otro)}</div>
       ${filas}
     </details>`;
   }).join('') || '<p class="inv-empty">Todavía no hay ventas</p>';
@@ -140,9 +142,9 @@ function renderPorFecha(feria, containerRaiz, ventas, items, el) {
   el.querySelectorAll('[data-action="anular-venta"]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const { confirmDialog } = await import('./ui.js');
-      const ok = await confirmDialog('¿Anular esta venta? Se repone el stock y los insumos, y queda registrada como anulada.');
+      const ok = await confirmDialog('¿Anular esta venta? Se repone el stock y los insumos, y queda registrada como anulada.', { peligro: true });
       if (!ok) return;
-      const motivo = prompt('Motivo (opcional):') || null;
+      const motivo = (await promptDialog('Motivo de la anulación (opcional):', { okLabel: 'Anular venta', placeholder: 'Ej: se equivocó de producto' })) || null;
       const { error } = await supabase.rpc('anular_venta', { p_venta_id: btn.dataset.id, p_motivo: motivo });
       const { toast } = await import('./ui.js');
       if (error) { toast(`No se pudo anular: ${error.message}`); return; }
@@ -161,7 +163,7 @@ function renderTopProductos(items, comboItems, el) {
     conteo[ci.producto_nombre] = (conteo[ci.producto_nombre] || 0) + 1;
   });
   const ranking = Object.entries(conteo).sort((a, b) => b[1] - a[1]).slice(0, 10);
-  el.innerHTML = ranking.map(([nombre, cant]) => `<div class="inv-row"><span>${nombre}</span><span>${cant} vendidos</span></div>`).join('')
+  el.innerHTML = ranking.map(([nombre, cant]) => `<div class="inv-row"><span>${escapeHtml(nombre)}</span><span>${cant} vendidos</span></div>`).join('')
     || '<p class="inv-empty">Todavía no hay ventas</p>';
 }
 
@@ -171,6 +173,6 @@ function renderPorCategoria(items, el) {
     const clave = i.tipo === 'combo' ? 'Combos' : (i.categoria_precio_nombre || 'Sin categoría');
     porCategoria[clave] = (porCategoria[clave] || 0) + i.precio_unitario * i.cantidad;
   });
-  el.innerHTML = Object.entries(porCategoria).map(([nombre, total]) => `<div class="inv-row"><span>${nombre}</span><span>$${total}</span></div>`).join('')
+  el.innerHTML = Object.entries(porCategoria).map(([nombre, total]) => `<div class="inv-row"><span>${escapeHtml(nombre)}</span><span>${formatMoney(total)}</span></div>`).join('')
     || '<p class="inv-empty">Todavía no hay ventas</p>';
 }

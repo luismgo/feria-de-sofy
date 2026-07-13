@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient.js';
-import { toast } from './ui.js';
+import { toast, escapeHtml, formatMoney, promptDialog, uuid, confirmDialog } from './ui.js';
 import { isOnline } from './connection.js';
 
 let realtimeChannel = null;
@@ -32,6 +32,8 @@ export function initVender(feria) {
   realtimeChannel = supabase
     .channel(`vender-${feria.id}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'productos' }, () => loadAndRender(feria, container))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'feria_productos' }, () => loadAndRender(feria, container))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'categorias_precio' }, () => loadAndRender(feria, container))
     .subscribe();
 
   return () => {
@@ -72,6 +74,15 @@ function cantidadEnCarrito(productoId) {
   return total;
 }
 
+// Aplica el filtro del buscador ocultando/mostrando tarjetas ya renderizadas,
+// en vez de reconstruir la grilla en cada tecla (que saltaba el cursor y parpadeaba el teclado).
+function aplicarFiltroBusqueda(grid) {
+  const term = filtroBusqueda.trim().toLowerCase();
+  grid.querySelectorAll('.producto-card').forEach((card) => {
+    card.classList.toggle('hidden', !!term && !(card.dataset.nombre || '').includes(term));
+  });
+}
+
 function render(feria, feriaProductos, combos, container) {
   container.innerHTML = '';
 
@@ -82,10 +93,8 @@ function render(feria, feriaProductos, combos, container) {
   buscador.value = filtroBusqueda;
   buscador.addEventListener('input', () => {
     filtroBusqueda = buscador.value;
-    const scroll = window.scrollY;
-    render(feria, feriaProductos, combos, container);
-    window.scrollTo(0, scroll);
-    container.querySelector('.vender-buscador')?.focus();
+    const grid = container.querySelector('.productos-grid');
+    if (grid) aplicarFiltroBusqueda(grid); // sin re-render: conserva foco y posición del cursor
   });
   container.appendChild(buscador);
 
@@ -95,7 +104,7 @@ function render(feria, feriaProductos, combos, container) {
     combos.forEach((combo) => {
       const btn = document.createElement('button');
       btn.className = 'combo-btn';
-      btn.textContent = `${combo.nombre} — $${combo.precio}`;
+      btn.textContent = `${combo.nombre} — ${formatMoney(combo.precio)}`;
       btn.addEventListener('click', () => agregarComboAlCarrito(combo, feriaProductos, feria, container));
       combosRow.appendChild(btn);
     });
@@ -110,28 +119,25 @@ function render(feria, feriaProductos, combos, container) {
     if (rankA !== rankB) return rankA - rankB;               // más vendidos primero (congelado)
     return a.productos.nombre.localeCompare(b.productos.nombre, 'es'); // luego alfabético estable
   });
-  const visibles = filtroBusqueda
-    ? ordenados.filter((fp) => fp.productos.nombre.toLowerCase().includes(filtroBusqueda.toLowerCase()))
-    : ordenados;
-
   const grid = document.createElement('div');
   grid.className = 'productos-grid';
-  visibles.forEach((fp) => {
+  ordenados.forEach((fp) => {
     const p = fp.productos;
     const precio = precioEfectivo(fp);
     const disponible = p.stock - cantidadEnCarrito(p.id);
     const card = document.createElement('button');
     card.className = 'producto-card';
+    card.dataset.nombre = p.nombre.toLowerCase();
     if (precio == null) {
       card.classList.add('producto-card--sin-precio');
       card.innerHTML = `
-        ${p.imagen_url ? `<img src="${p.imagen_url}" alt="${p.nombre}" />` : '<div class="producto-card__sin-foto">🌸</div>'}
-        <span class="producto-card__nombre">${p.nombre}</span>
+        ${p.imagen_url ? `<img src="${p.imagen_url}" alt="${escapeHtml(p.nombre)}" />` : '<div class="producto-card__sin-foto">🌸</div>'}
+        <span class="producto-card__nombre">${escapeHtml(p.nombre)}</span>
         <span class="producto-card__poner-precio">Tocar para poner precio</span>
       `;
       card.addEventListener('click', async () => {
-        const val = prompt(`Precio de "${p.nombre}" en esta feria:`);
-        if (val === null) return; // el usuario canceló el prompt
+        const val = await promptDialog(`Precio de "${p.nombre}" en esta feria:`, { placeholder: 'Ej: 100', tipo: 'number', okLabel: 'Poner precio' });
+        if (val === null) return; // el usuario canceló
         const precio = Number(val);
         if (!Number.isFinite(precio) || precio <= 0) { toast('Poné un precio válido mayor a 0.'); return; }
         const { error } = await supabase.from('feria_productos').update({ precio_override: precio }).eq('id', fp.id);
@@ -143,15 +149,16 @@ function render(feria, feriaProductos, combos, container) {
     }
     card.disabled = disponible <= 0;
     card.innerHTML = `
-      ${p.imagen_url ? `<img src="${p.imagen_url}" alt="${p.nombre}" />` : '<div class="producto-card__sin-foto">🌸</div>'}
-      <span class="producto-card__nombre">${p.nombre}</span>
-      <span class="producto-card__precio">$${precio}</span>
+      ${p.imagen_url ? `<img src="${p.imagen_url}" alt="${escapeHtml(p.nombre)}" />` : '<div class="producto-card__sin-foto">🌸</div>'}
+      <span class="producto-card__nombre">${escapeHtml(p.nombre)}</span>
+      <span class="producto-card__precio">${formatMoney(precio)}</span>
       <span class="producto-card__stock">${disponible > 0 ? `Disponible: ${disponible}` : 'Sin stock'}</span>
     `;
     card.addEventListener('click', () => agregarProductoAlCarrito(p, precio, feria, container));
     grid.appendChild(card);
   });
   container.appendChild(grid);
+  aplicarFiltroBusqueda(grid); // conserva el filtro activo tras un re-render (ej. agregar al carrito)
 
   container.appendChild(renderCarrito(feria, container));
 }
@@ -187,15 +194,15 @@ function renderCarrito(feria, container) {
     <div class="carrito-lineas">
       ${carrito.map((l, i) => `
         <div class="carrito-linea" data-index="${i}">
-          <span>${l.tipo === 'producto' ? `${l.nombre} x${l.cantidad}` : l.nombre} — $${l.precio * (l.tipo === 'producto' ? l.cantidad : 1)}</span>
-          <button class="btn-icon" data-action="quitar-linea" data-index="${i}" title="Quitar del carrito">🗑️</button>
+          <span>${l.tipo === 'producto' ? `${escapeHtml(l.nombre)} x${l.cantidad}` : escapeHtml(l.nombre)} — ${formatMoney(l.precio * (l.tipo === 'producto' ? l.cantidad : 1))}</span>
+          <button class="btn-accion btn-accion--sm" data-action="quitar-linea" data-index="${i}" title="Quitar del carrito">🗑️ Quitar</button>
         </div>
       `).join('') || '<p class="inv-empty">Carrito vacío</p>'}
     </div>
     <div class="carrito-descuento">
       <label>Descuento $ <input type="number" id="input-descuento" min="0" step="1" value="${descuentoActual || ''}" placeholder="0" /></label>
     </div>
-    <p class="carrito-total">Total: $${total}${descuentoActual ? ` <s>$${bruto}</s>` : ''}</p>
+    <p class="carrito-total">Total: ${formatMoney(total)}${descuentoActual ? ` <s>${formatMoney(bruto)}</s>` : ''}</p>
     <div class="carrito-pago">
       <span>Pago:</span>
       ${['efectivo', 'transferencia', 'otro'].map((m) => `
@@ -217,7 +224,10 @@ function renderCarrito(feria, container) {
     });
   });
 
-  panel.querySelector('#btn-vaciar-carrito').addEventListener('click', () => {
+  panel.querySelector('#btn-vaciar-carrito').addEventListener('click', async () => {
+    if (carrito.length === 0) return;
+    const ok = await confirmDialog('¿Vaciar el carrito? Se quitan todos los productos que agregaste.');
+    if (!ok) return;
     carrito = [];
     refrescarCarrito(feria, container);
   });
@@ -251,7 +261,7 @@ function renderCarrito(feria, container) {
     btn.textContent = 'Confirmando...';
 
     // idempotencia: un id estable por carrito; si reintentás, no se cobra dos veces
-    if (!clientVentaIdPendiente) clientVentaIdPendiente = crypto.randomUUID();
+    if (!clientVentaIdPendiente) clientVentaIdPendiente = uuid();
 
     const items = carrito.map((l) => l.tipo === 'producto'
       ? { tipo: 'producto', producto_id: l.productoId, cantidad: l.cantidad }
@@ -300,7 +310,7 @@ function renderCarrito(feria, container) {
     metodoPagoActual = 'efectivo';
     descuentoActual = 0;
     if (window.confetti) window.confetti({ particleCount: 120, spread: 80, origin: { y: 0.7 } });
-    toast(`¡Venta registrada! 🎉 Total: $${data[0].total}`);
+    toast(`¡Venta registrada! 🎉 Total: ${formatMoney(data[0].total)}`);
     loadAndRender(feria, container);
   });
 
@@ -333,10 +343,10 @@ function seleccionarProductosCombo(combo, disponibles) {
     function render() {
       overlay.innerHTML = `
         <div class="modal modal--combo">
-          <p>Elegí ${combo.cantidad} productos para "${combo.nombre}" (${seleccion.size}/${combo.cantidad})</p>
+          <p>Elegí ${combo.cantidad} productos para "${escapeHtml(combo.nombre)}" (${seleccion.size}/${combo.cantidad})</p>
           <div class="combo-picker-grid">
             ${disponibles.map((p) => `
-              <button class="combo-picker-item ${seleccion.has(p.id) ? 'selected' : ''}" data-id="${p.id}">${p.nombre}</button>
+              <button class="combo-picker-item ${seleccion.has(p.id) ? 'selected' : ''}" data-id="${p.id}">${escapeHtml(p.nombre)}</button>
             `).join('')}
           </div>
           <div class="modal-actions">

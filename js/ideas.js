@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient.js';
-import { confirmDialog } from './ui.js';
+import { confirmDialog, mutar, escapeHtml } from './ui.js';
 
 const TIPOS = { producto: '💡 Producto', logistica: '📋 Logística', precio: '💰 Precio/Promo' };
 
@@ -12,7 +12,12 @@ export function initIdeas(feria) {
 
 async function render(feria, container, filtro) {
   const query = supabase.from('notas').select('*').eq('feria_id', feria.id).order('created_at', { ascending: false });
-  const { data: notas } = filtro === 'todos' ? await query : await query.eq('tipo', filtro);
+  const { data: notas, error } = filtro === 'todos' ? await query : await query.eq('tipo', filtro);
+
+  if (error) {
+    container.innerHTML = '<p class="error">No se pudieron cargar las ideas — revisá la conexión</p>';
+    return;
+  }
 
   container.innerHTML = `
     <div class="ideas-filtros">
@@ -24,8 +29,8 @@ async function render(feria, container, filtro) {
         <div class="idea-row ${n.hecho ? 'idea-row--hecho' : ''}" data-id="${n.id}">
           <input type="checkbox" data-action="toggle-hecho" data-id="${n.id}" ${n.hecho ? 'checked' : ''} title="Marcar como hecho" />
           <span class="idea-tipo">${TIPOS[n.tipo]}</span>
-          <span class="idea-texto">${n.texto}</span>
-          <button class="btn-icon" data-action="eliminar-nota" data-id="${n.id}" title="Borrar esta idea">🗑️</button>
+          <span class="idea-texto">${escapeHtml(n.texto)}</span>
+          <button class="btn-accion btn-accion--peligro btn-accion--sm" data-action="eliminar-nota" data-id="${n.id}" title="Borrar esta idea">🗑️ Borrar</button>
         </div>
       `).join('') || '<p class="inv-empty">Sin notas todavía</p>'}
     </div>
@@ -44,15 +49,18 @@ async function render(feria, container, filtro) {
 
   container.querySelectorAll('[data-action="toggle-hecho"]').forEach((cb) => {
     cb.addEventListener('change', async () => {
-      await supabase.from('notas').update({ hecho: cb.checked }).eq('id', cb.dataset.id);
+      const { error } = await mutar(supabase.from('notas').update({ hecho: cb.checked }).eq('id', cb.dataset.id), 'No se pudo actualizar la idea');
+      if (error) { cb.checked = !cb.checked; return; } // revertir el visual si no se guardó
+      cb.closest('.idea-row')?.classList.toggle('idea-row--hecho', cb.checked);
     });
   });
 
   container.querySelectorAll('[data-action="eliminar-nota"]').forEach((btn) => {
     btn.addEventListener('click', async () => {
-      const ok = await confirmDialog('¿Eliminar esta nota?');
+      const ok = await confirmDialog('¿Eliminar esta nota?', { peligro: true });
       if (!ok) return;
-      await supabase.from('notas').delete().eq('id', btn.dataset.id);
+      const { error } = await mutar(supabase.from('notas').delete().eq('id', btn.dataset.id), 'No se pudo eliminar la idea');
+      if (error) return;
       render(feria, container, filtro);
     });
   });
@@ -60,7 +68,10 @@ async function render(feria, container, filtro) {
   container.querySelector('#form-nota').addEventListener('submit', async (e) => {
     e.preventDefault();
     const form = e.target;
-    await supabase.from('notas').insert({ feria_id: feria.id, tipo: form.tipo.value, texto: form.texto.value.trim() });
+    const submitBtn = form.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    const { error } = await mutar(supabase.from('notas').insert({ feria_id: feria.id, tipo: form.tipo.value, texto: form.texto.value.trim() }), 'No se pudo agregar la idea');
+    if (error) { submitBtn.disabled = false; return; }
     render(feria, container, filtro);
   });
 }
