@@ -59,7 +59,7 @@ export async function renderInsumosSection(container) {
 
   list.querySelectorAll('[data-action="eliminar-insumo"]').forEach((btn) => {
     btn.addEventListener('click', async () => {
-      const ok = await confirmDialog('¿Eliminar este insumo? Se quita también de la receta de los productos que lo usaban.', { peligro: true });
+      const ok = await confirmDialog('¿Eliminar este insumo? Se quita también de los productos que lo usaban.', { peligro: true });
       if (!ok) return;
       const { error } = await mutar(supabase.from('insumos').delete().eq('id', btn.dataset.id), 'No se pudo eliminar el insumo');
       if (error) return;
@@ -78,9 +78,11 @@ export async function renderInsumosSection(container) {
   });
 }
 
-export async function abrirRecetaModal(producto) {
+// Insumos de un producto: qué insumos descuenta del stock al venderse (uno o varios).
+// No todo producto es una "receta" — es simplemente la lista de insumos que gasta.
+export async function abrirInsumosProducto(producto) {
   const insumos = await fetchInsumos();
-  const { data: receta } = await supabase.from('producto_insumos').select('*').eq('producto_id', producto.id);
+  const { data: asignados } = await supabase.from('producto_insumos').select('*').eq('producto_id', producto.id);
 
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
@@ -88,24 +90,24 @@ export async function abrirRecetaModal(producto) {
   function render() {
     overlay.innerHTML = `
       <div class="modal">
-        <p>Receta de "${escapeHtml(producto.nombre)}" — qué insumos consume por unidad vendida</p>
-        <div id="receta-list" class="inv-list">
-          ${receta.map((r) => {
+        <p>Insumos de "${escapeHtml(producto.nombre)}" — qué se descuenta del stock al vender una unidad</p>
+        <div id="insumos-list" class="inv-list">
+          ${asignados.map((r) => {
             const insumo = insumos.find((i) => i.id === r.insumo_id);
             return `
               <div class="inv-row">
                 <span>${insumo ? escapeHtml(insumo.nombre) : '(insumo eliminado)'} x ${r.cantidad}</span>
-                <button class="btn-accion btn-accion--peligro btn-accion--sm" data-action="quitar-receta" data-id="${r.id}" title="Quitar este insumo de la receta">🗑️ Quitar</button>
+                <button class="btn-accion btn-accion--peligro btn-accion--sm" data-action="quitar-insumo" data-id="${r.id}" title="Quitar este insumo del producto">🗑️ Quitar</button>
               </div>
             `;
           }).join('') || '<p class="inv-empty">Sin insumos asignados todavía</p>'}
         </div>
-        <form id="form-agregar-receta" class="inv-form">
+        <form id="form-agregar-insumo" class="inv-form">
           <select name="insumo_id">
             ${insumos.map((i) => `<option value="${i.id}">${escapeHtml(i.nombre)}</option>`).join('')}
           </select>
           <input name="cantidad" type="number" min="1" value="1" placeholder="Cantidad" required />
-          <button type="submit">Agregar a la receta</button>
+          <button type="submit">Agregar insumo</button>
         </form>
         <div class="modal-actions">
           <button class="btn btn--secondary" data-action="cerrar">Cerrar</button>
@@ -125,17 +127,17 @@ export async function abrirRecetaModal(producto) {
       document.body.removeChild(overlay);
       return;
     }
-    if (e.target.dataset.action === 'quitar-receta') {
-      const { error } = await mutar(supabase.from('producto_insumos').delete().eq('id', e.target.dataset.id), 'No se pudo quitar el insumo de la receta');
+    if (e.target.dataset.action === 'quitar-insumo') {
+      const { error } = await mutar(supabase.from('producto_insumos').delete().eq('id', e.target.dataset.id), 'No se pudo quitar el insumo');
       if (error) return;
-      const idx = receta.findIndex((r) => r.id === e.target.dataset.id);
-      if (idx >= 0) receta.splice(idx, 1);
+      const idx = asignados.findIndex((r) => r.id === e.target.dataset.id);
+      if (idx >= 0) asignados.splice(idx, 1);
       render();
     }
   });
 
   overlay.addEventListener('submit', async (e) => {
-    if (e.target.id !== 'form-agregar-receta') return;
+    if (e.target.id !== 'form-agregar-insumo') return;
     e.preventDefault();
     const form = e.target;
     const submitBtn = form.querySelector('button[type="submit"]');
@@ -146,9 +148,9 @@ export async function abrirRecetaModal(producto) {
       cantidad: Number(form.cantidad.value),
     }, { onConflict: 'producto_id,insumo_id' }).select().single();
     // Si el upsert falla, `nueva` es null: NO lo metemos al array o el próximo render() crashea con r.insumo_id sobre null.
-    if (error || !nueva) { submitBtn.disabled = false; toast('No se pudo agregar el insumo a la receta'); return; }
-    const idx = receta.findIndex((r) => r.insumo_id === form.insumo_id.value);
-    if (idx >= 0) receta[idx] = nueva; else receta.push(nueva);
+    if (error || !nueva) { submitBtn.disabled = false; toast('No se pudo agregar el insumo'); return; }
+    const idx = asignados.findIndex((r) => r.insumo_id === form.insumo_id.value);
+    if (idx >= 0) asignados[idx] = nueva; else asignados.push(nueva);
     render();
   });
 }

@@ -1,6 +1,6 @@
 import { supabase } from './supabaseClient.js';
 import { confirmDialog, toast, mutar, escapeHtml, formatMoney, uuid } from './ui.js';
-import { renderInsumosSection, abrirRecetaModal } from './insumos.js';
+import { renderInsumosSection, abrirInsumosProducto } from './insumos.js';
 
 export function initInventario(feria) {
   const container = document.getElementById('tab-inventario');
@@ -231,7 +231,7 @@ function renderProductos(feria, feriaProductos, categorias, container) {
           </label>
         </div>
         <div class="inv-producto__acciones">
-          <button class="btn-accion" data-action="ver-receta" data-producto-id="${p.id}" data-producto-nombre="${escapeHtml(p.nombre)}" title="Insumos que gasta este producto al venderse">🧪 Receta</button>
+          <button class="btn-accion" data-action="ver-insumos" data-producto-id="${p.id}" data-producto-nombre="${escapeHtml(p.nombre)}" title="Insumos que este producto descuenta del stock al venderse">📦 Insumos</button>
           <button class="btn-accion" data-action="quitar-de-feria" data-id="${fp.id}" title="Se quita de esta feria; sigue en las demás">➖ Quitar de la feria</button>
           <button class="btn-accion btn-accion--peligro" data-action="eliminar-producto" data-producto-id="${p.id}" title="Borra el producto de TODAS las ferias">🗑️ Eliminar</button>
         </div>
@@ -282,9 +282,9 @@ function renderProductos(feria, feriaProductos, categorias, container) {
     });
   });
 
-  list.querySelectorAll('[data-action="ver-receta"]').forEach((btn) => {
+  list.querySelectorAll('[data-action="ver-insumos"]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      abrirRecetaModal({ id: btn.dataset.productoId, nombre: btn.dataset.productoNombre });
+      abrirInsumosProducto({ id: btn.dataset.productoId, nombre: btn.dataset.productoNombre });
     });
   });
 
