@@ -188,7 +188,7 @@ function renderCarrito(feria, container) {
       ${carrito.map((l, i) => `
         <div class="carrito-linea" data-index="${i}">
           <span>${l.tipo === 'producto' ? `${l.nombre} x${l.cantidad}` : l.nombre} — $${l.precio * (l.tipo === 'producto' ? l.cantidad : 1)}</span>
-          <button class="btn-icon" data-action="quitar-linea" data-index="${i}">🗑️</button>
+          <button class="btn-icon" data-action="quitar-linea" data-index="${i}" title="Quitar del carrito">🗑️</button>
         </div>
       `).join('') || '<p class="inv-empty">Carrito vacío</p>'}
     </div>

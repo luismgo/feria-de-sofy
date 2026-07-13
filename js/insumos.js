@@ -27,7 +27,7 @@ export async function renderInsumosSection(container) {
       <span>${i.nombre}</span>
       <label class="inv-mini-label">Stock <input type="number" class="insumo-stock-input" data-id="${i.id}" value="${i.stock}" min="0" /></label>
       <label class="inv-mini-label">Costo $<input type="number" class="insumo-costo-input" data-id="${i.id}" value="${i.costo ?? 0}" min="0" step="1" /></label>
-      <button class="btn-icon" data-action="eliminar-insumo" data-id="${i.id}">🗑️</button>
+      <button class="btn-icon" data-action="eliminar-insumo" data-id="${i.id}" title="Eliminar este insumo">🗑️</button>
     </div>
   `).join('') || '<p class="inv-empty">Todavía no hay insumos</p>';
 
@@ -77,7 +77,7 @@ export async function abrirRecetaModal(producto) {
             return `
               <div class="inv-row">
                 <span>${insumo ? insumo.nombre : '(insumo eliminado)'} x ${r.cantidad}</span>
-                <button class="btn-icon" data-action="quitar-receta" data-id="${r.id}">🗑️</button>
+                <button class="btn-icon" data-action="quitar-receta" data-id="${r.id}" title="Quitar este insumo de la receta">🗑️</button>
               </div>
             `;
           }).join('') || '<p class="inv-empty">Sin insumos asignados todavía</p>'}

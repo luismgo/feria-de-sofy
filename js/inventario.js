@@ -18,6 +18,7 @@ async function render(feria, container) {
   container.innerHTML = `
     <section class="inv-section">
       <h2>Categorías de precio</h2>
+      <p class="inv-hint">Agrupá productos por precio: todos los de una categoría valen lo mismo (ej: "Chico" = $100). Así cambiás un precio en un solo lugar.</p>
       <div id="inv-categorias" class="inv-list"></div>
       <form id="form-categoria" class="inv-form">
         <input name="nombre" placeholder="Nombre (ej: Chico)" required />
@@ -28,6 +29,7 @@ async function render(feria, container) {
 
     <section class="inv-section">
       <h2>Combos</h2>
+      <p class="inv-hint">Un combo vende varios productos juntos a un precio especial (ej: "3 stickers por $250"). Al vender elegís qué productos entran.</p>
       <div id="inv-combos" class="inv-list"></div>
       <form id="form-combo" class="inv-form">
         <input name="nombre" placeholder="Nombre (ej: Combo 3 stickers)" required />
@@ -148,7 +150,7 @@ function renderCategorias(feria, categorias, container) {
   list.innerHTML = categorias.map((c) => `
     <div class="inv-row" data-id="${c.id}">
       <span>${c.nombre} — $${c.precio}</span>
-      <button class="btn-icon" data-action="eliminar-categoria" data-id="${c.id}">🗑️</button>
+      <button class="btn-icon" data-action="eliminar-categoria" data-id="${c.id}" title="Eliminar esta categoría de precio">🗑️</button>
     </div>
   `).join('') || '<p class="inv-empty">Todavía no hay categorías de precio</p>';
 
@@ -167,8 +169,8 @@ function renderCombos(feria, combos, container) {
   list.innerHTML = combos.map((c) => `
     <div class="inv-row" data-id="${c.id}">
       <span>${c.nombre} — ${c.cantidad} productos por $${c.precio} ${c.activo ? '' : '(inactivo)'}</span>
-      <button class="btn-icon" data-action="toggle-combo" data-id="${c.id}" data-activo="${c.activo}">${c.activo ? '⏸️' : '▶️'}</button>
-      <button class="btn-icon" data-action="eliminar-combo" data-id="${c.id}">🗑️</button>
+      <button class="btn-icon" data-action="toggle-combo" data-id="${c.id}" data-activo="${c.activo}" title="${c.activo ? 'Pausar combo (deja de aparecer al vender)' : 'Activar combo'}">${c.activo ? '⏸️' : '▶️'}</button>
+      <button class="btn-icon" data-action="eliminar-combo" data-id="${c.id}" title="Eliminar este combo">🗑️</button>
     </div>
   `).join('') || '<p class="inv-empty">Todavía no hay combos</p>';
 
@@ -207,9 +209,9 @@ function renderProductos(feria, feriaProductos, categorias, container) {
           <option value="">Sin categoría</option>
           ${categorias.map((c) => `<option value="${c.id}" ${fp.categoria_precio_id === c.id ? 'selected' : ''}>${c.nombre}</option>`).join('')}
         </select>
-        <button class="btn-icon" data-action="ver-receta" data-producto-id="${p.id}" data-producto-nombre="${p.nombre}">🧪</button>
-        <button class="btn-icon" data-action="quitar-de-feria" data-id="${fp.id}">➖</button>
-        <button class="btn-icon" data-action="eliminar-producto" data-producto-id="${p.id}">🗑️</button>
+        <button class="btn-icon" data-action="ver-receta" data-producto-id="${p.id}" data-producto-nombre="${p.nombre}" title="Ver o editar la receta (insumos que gasta este producto)">🧪</button>
+        <button class="btn-icon" data-action="quitar-de-feria" data-id="${fp.id}" title="Quitar de esta feria (sigue existiendo en las demás)">➖</button>
+        <button class="btn-icon" data-action="eliminar-producto" data-producto-id="${p.id}" title="Eliminar el producto de TODAS las ferias">🗑️</button>
       </div>
     `;
   }).join('') || '<p class="inv-empty">Todavía no hay productos en esta feria</p>';
@@ -297,7 +299,7 @@ async function abrirReutilizarModal(feriaActual, categoriasActuales, container) 
     list.innerHTML = disponibles.map((fp) => `
       <div class="inv-row">
         <span>${fp.productos.nombre} (stock: ${fp.productos.stock})</span>
-        <button class="btn-icon" data-action="agregar-producto" data-id="${fp.productos.id}">➕</button>
+        <button class="btn-icon" data-action="agregar-producto" data-id="${fp.productos.id}" title="Traer este producto a esta feria">➕</button>
       </div>
     `).join('') || '<p class="inv-empty">No hay productos nuevos para traer de esa feria</p>';
 

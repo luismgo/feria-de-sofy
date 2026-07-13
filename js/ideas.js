@@ -22,10 +22,10 @@ async function render(feria, container, filtro) {
     <div id="ideas-list" class="ideas-list">
       ${notas.map((n) => `
         <div class="idea-row ${n.hecho ? 'idea-row--hecho' : ''}" data-id="${n.id}">
-          <input type="checkbox" data-action="toggle-hecho" data-id="${n.id}" ${n.hecho ? 'checked' : ''} />
+          <input type="checkbox" data-action="toggle-hecho" data-id="${n.id}" ${n.hecho ? 'checked' : ''} title="Marcar como hecho" />
           <span class="idea-tipo">${TIPOS[n.tipo]}</span>
           <span class="idea-texto">${n.texto}</span>
-          <button class="btn-icon" data-action="eliminar-nota" data-id="${n.id}">🗑️</button>
+          <button class="btn-icon" data-action="eliminar-nota" data-id="${n.id}" title="Borrar esta idea">🗑️</button>
         </div>
       `).join('') || '<p class="inv-empty">Sin notas todavía</p>'}
     </div>
