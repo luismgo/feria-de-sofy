@@ -11,7 +11,7 @@ export async function renderInsumosSection(container) {
 
   container.innerHTML = `
     <h2>Insumos</h2>
-    <p class="inv-hint">Empaques y materiales que se descuentan solos al vender, sin venderse ellos mismos (ej. bolsitas).</p>
+    <p class="card__hint">Empaques y materiales que se descuentan solos al vender, sin venderse ellos mismos (ej. bolsitas).</p>
     <div id="inv-insumos" class="inv-list"></div>
     <form id="form-insumo" class="inv-form">
       <input name="nombre" placeholder="Nombre (ej: Bolsita transparente)" required />
@@ -23,13 +23,13 @@ export async function renderInsumosSection(container) {
 
   const list = container.querySelector('#inv-insumos');
   list.innerHTML = insumos.map((i) => `
-    <div class="inv-row" data-id="${i.id}">
+    <div class="row" data-id="${i.id}">
       <span>${escapeHtml(i.nombre)}</span>
       <label class="inv-mini-label">Stock <input type="number" class="insumo-stock-input" data-id="${i.id}" value="${i.stock}" min="0" /></label>
       <label class="inv-mini-label">Costo $<input type="number" class="insumo-costo-input" data-id="${i.id}" value="${i.costo ?? 0}" min="0" step="1" /></label>
       <button class="btn-accion btn-accion--peligro" data-action="eliminar-insumo" data-id="${i.id}" title="Eliminar este insumo">🗑️ Eliminar</button>
     </div>
-  `).join('') || '<p class="inv-empty">Todavía no hay insumos</p>';
+  `).join('') || '<p class="list-empty">Todavía no hay insumos</p>';
 
   list.querySelectorAll('.insumo-stock-input').forEach((input) => {
     input.addEventListener('change', async () => {
@@ -95,12 +95,12 @@ export async function abrirInsumosProducto(producto) {
           ${asignados.map((r) => {
             const insumo = insumos.find((i) => i.id === r.insumo_id);
             return `
-              <div class="inv-row">
+              <div class="row">
                 <span>${insumo ? escapeHtml(insumo.nombre) : '(insumo eliminado)'} x ${r.cantidad}</span>
                 <button class="btn-accion btn-accion--peligro btn-accion--sm" data-action="quitar-insumo" data-id="${r.id}" title="Quitar este insumo del producto">🗑️ Quitar</button>
               </div>
             `;
-          }).join('') || '<p class="inv-empty">Sin insumos asignados todavía</p>'}
+          }).join('') || '<p class="list-empty">Sin insumos asignados todavía</p>'}
         </div>
         <form id="form-agregar-insumo" class="inv-form">
           <select name="insumo_id">

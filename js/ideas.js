@@ -32,7 +32,7 @@ async function render(feria, container, filtro) {
           <span class="idea-texto">${escapeHtml(n.texto)}</span>
           <button class="btn-accion btn-accion--peligro btn-accion--sm" data-action="eliminar-nota" data-id="${n.id}" title="Borrar esta idea">🗑️ Borrar</button>
         </div>
-      `).join('') || '<p class="inv-empty">Sin notas todavía</p>'}
+      `).join('') || '<p class="list-empty">Sin notas todavía</p>'}
     </div>
     <form id="form-nota" class="inv-form">
       <select name="tipo">

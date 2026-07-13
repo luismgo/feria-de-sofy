@@ -39,22 +39,22 @@ async function render(feria, container) {
     .gte('created_at', inicioHoy.toISOString());
 
   container.innerHTML = `
-    <section class="inv-section" id="reporte-cierre">
+    <section class="card" id="reporte-cierre">
       <h2>🧾 Cerrar caja (hoy)</h2>
-      <p class="inv-hint">Es una calculadora de arqueo: compará el efectivo esperado con lo que contás en la caja. No corta las ventas ni guarda un cierre — podés revisarla las veces que quieras.</p>
+      <p class="card__hint">Es una calculadora de arqueo: compará el efectivo esperado con lo que contás en la caja. No corta las ventas ni guarda un cierre — podés revisarla las veces que quieras.</p>
       <div id="cierre-content"></div>
     </section>
-    <section class="inv-section">
+    <section class="card">
       <h2>Por fecha</h2>
       <div id="reporte-fechas"></div>
     </section>
-    <section class="inv-section">
+    <section class="card">
       <h2>Productos más vendidos</h2>
       <div id="reporte-top-productos"></div>
     </section>
-    <section class="inv-section">
+    <section class="card">
       <h2>Por categoría de precio</h2>
-      <p class="inv-hint">Suma de ventas por categoría, antes de descuentos. Para el dinero real de la caja mirá "Cerrar caja".</p>
+      <p class="card__hint">Suma de ventas por categoría, antes de descuentos. Para el dinero real de la caja mirá "Cerrar caja".</p>
       <div id="reporte-categorias"></div>
     </section>
   `;
@@ -137,7 +137,7 @@ function renderPorFecha(feria, containerRaiz, ventas, items, el) {
       <div class="dia-metodos">💵 ${formatMoney(porMetodo.efectivo)} · 📲 ${formatMoney(porMetodo.transferencia)} · 🔵 ${formatMoney(porMetodo.otro)}</div>
       ${filas}
     </details>`;
-  }).join('') || '<p class="inv-empty">Todavía no hay ventas</p>';
+  }).join('') || '<p class="list-empty">Todavía no hay ventas</p>';
 
   el.querySelectorAll('[data-action="anular-venta"]').forEach((btn) => {
     btn.addEventListener('click', async () => {
@@ -163,8 +163,8 @@ function renderTopProductos(items, comboItems, el) {
     conteo[ci.producto_nombre] = (conteo[ci.producto_nombre] || 0) + 1;
   });
   const ranking = Object.entries(conteo).sort((a, b) => b[1] - a[1]).slice(0, 10);
-  el.innerHTML = ranking.map(([nombre, cant]) => `<div class="inv-row"><span>${escapeHtml(nombre)}</span><span>${cant} vendidos</span></div>`).join('')
-    || '<p class="inv-empty">Todavía no hay ventas</p>';
+  el.innerHTML = ranking.map(([nombre, cant]) => `<div class="row"><span>${escapeHtml(nombre)}</span><span>${cant} vendidos</span></div>`).join('')
+    || '<p class="list-empty">Todavía no hay ventas</p>';
 }
 
 function renderPorCategoria(items, el) {
@@ -173,6 +173,6 @@ function renderPorCategoria(items, el) {
     const clave = i.tipo === 'combo' ? 'Combos' : (i.categoria_precio_nombre || 'Sin categoría');
     porCategoria[clave] = (porCategoria[clave] || 0) + i.precio_unitario * i.cantidad;
   });
-  el.innerHTML = Object.entries(porCategoria).map(([nombre, total]) => `<div class="inv-row"><span>${escapeHtml(nombre)}</span><span>${formatMoney(total)}</span></div>`).join('')
-    || '<p class="inv-empty">Todavía no hay ventas</p>';
+  el.innerHTML = Object.entries(porCategoria).map(([nombre, total]) => `<div class="row"><span>${escapeHtml(nombre)}</span><span>${formatMoney(total)}</span></div>`).join('')
+    || '<p class="list-empty">Todavía no hay ventas</p>';
 }

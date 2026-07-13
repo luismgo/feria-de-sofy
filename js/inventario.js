@@ -21,9 +21,9 @@ async function render(feria, container) {
   }
 
   container.innerHTML = `
-    <section class="inv-section">
+    <section class="card">
       <h2>Categorías de precio</h2>
-      <p class="inv-hint">Agrupá productos por precio: todos los de una categoría valen lo mismo (ej: "Chico" = $100). Así cambiás un precio en un solo lugar.</p>
+      <p class="card__hint">Agrupá productos por precio: todos los de una categoría valen lo mismo (ej: "Chico" = $100). Así cambiás un precio en un solo lugar.</p>
       <div id="inv-categorias" class="inv-list"></div>
       <form id="form-categoria" class="inv-form">
         <input name="nombre" placeholder="Nombre (ej: Chico)" required />
@@ -32,9 +32,9 @@ async function render(feria, container) {
       </form>
     </section>
 
-    <section class="inv-section">
+    <section class="card">
       <h2>Combos</h2>
-      <p class="inv-hint">Un combo vende varios productos juntos a un precio especial (ej: "3 stickers por $250"). Al vender elegís qué productos entran.</p>
+      <p class="card__hint">Un combo vende varios productos juntos a un precio especial (ej: "3 stickers por $250"). Al vender elegís qué productos entran.</p>
       <div id="inv-combos" class="inv-list"></div>
       <form id="form-combo" class="inv-form">
         <input name="nombre" placeholder="Nombre (ej: Combo 3 stickers)" required />
@@ -44,7 +44,7 @@ async function render(feria, container) {
       </form>
     </section>
 
-    <section class="inv-section" id="inv-productos-section">
+    <section class="card" id="inv-productos-section">
       <h2>Productos</h2>
       <div id="inv-productos" class="inv-list"></div>
       <form id="form-producto" class="inv-form">
@@ -60,7 +60,7 @@ async function render(feria, container) {
       <button id="btn-reutilizar" class="btn btn--secondary" type="button">↩️ Reutilizar producto de otra feria</button>
     </section>
 
-    <section class="inv-section" id="inv-insumos-section"></section>
+    <section class="card" id="inv-insumos-section"></section>
   `;
 
   renderCategorias(feria, categorias, container);
@@ -159,11 +159,11 @@ async function render(feria, container) {
 function renderCategorias(feria, categorias, container) {
   const list = container.querySelector('#inv-categorias');
   list.innerHTML = categorias.map((c) => `
-    <div class="inv-row" data-id="${c.id}">
+    <div class="row" data-id="${c.id}">
       <span>${escapeHtml(c.nombre)} — ${formatMoney(c.precio)}</span>
       <button class="btn-accion btn-accion--peligro" data-action="eliminar-categoria" data-id="${c.id}" title="Eliminar esta categoría de precio">🗑️ Eliminar</button>
     </div>
-  `).join('') || '<p class="inv-empty">Todavía no hay categorías de precio</p>';
+  `).join('') || '<p class="list-empty">Todavía no hay categorías de precio</p>';
 
   list.querySelectorAll('[data-action="eliminar-categoria"]').forEach((btn) => {
     btn.addEventListener('click', async () => {
@@ -178,14 +178,14 @@ function renderCategorias(feria, categorias, container) {
 function renderCombos(feria, combos, container) {
   const list = container.querySelector('#inv-combos');
   list.innerHTML = combos.map((c) => `
-    <div class="inv-row" data-id="${c.id}">
+    <div class="row" data-id="${c.id}">
       <span>${escapeHtml(c.nombre)} — ${c.cantidad} productos por ${formatMoney(c.precio)}${c.activo ? '' : ' (en pausa)'}</span>
-      <div class="inv-row__acciones">
+      <div class="row__actions">
         <button class="btn-accion" data-action="toggle-combo" data-id="${c.id}" data-activo="${c.activo}" title="${c.activo ? 'Deja de aparecer al vender' : 'Vuelve a aparecer al vender'}">${c.activo ? '⏸️ Pausar' : '▶️ Activar'}</button>
         <button class="btn-accion btn-accion--peligro" data-action="eliminar-combo" data-id="${c.id}" title="Eliminar este combo">🗑️ Eliminar</button>
       </div>
     </div>
-  `).join('') || '<p class="inv-empty">Todavía no hay combos</p>';
+  `).join('') || '<p class="list-empty">Todavía no hay combos</p>';
 
   list.querySelectorAll('[data-action="toggle-combo"]').forEach((btn) => {
     btn.addEventListener('click', async () => {
@@ -216,7 +216,7 @@ function renderProductos(feria, feriaProductos, categorias, container) {
     return `
       <div class="inv-producto" data-id="${fp.id}" data-override="${fp.precio_override ?? ''}">
         <div class="inv-producto__head">
-          ${p.imagen_url ? `<img class="inv-row__foto" src="${p.imagen_url}" alt="${escapeHtml(p.nombre)}" />` : ''}
+          ${p.imagen_url ? `<img class="row__foto" src="${p.imagen_url}" alt="${escapeHtml(p.nombre)}" />` : ''}
           <span class="inv-producto__nombre">${escapeHtml(p.nombre)}</span>
           ${precioBadge}
         </div>
@@ -238,7 +238,7 @@ function renderProductos(feria, feriaProductos, categorias, container) {
         </div>
       </div>
     `;
-  }).join('') || '<p class="inv-empty">Todavía no hay productos en esta feria</p>';
+  }).join('') || '<p class="list-empty">Todavía no hay productos en esta feria</p>';
 
   list.querySelectorAll('.inv-stock-input').forEach((input) => {
     input.addEventListener('change', async () => {
@@ -359,11 +359,11 @@ async function abrirReutilizarModal(feriaActual, categoriasActuales, container) 
     const disponibles = (fps || []).filter((fp) => !idsYaVinculados.has(fp.producto_id));
     const list = overlay.querySelector('#reutilizar-productos-list');
     list.innerHTML = disponibles.map((fp) => `
-      <div class="inv-row">
+      <div class="row">
         <span>${escapeHtml(fp.productos.nombre)} (stock: ${fp.productos.stock})</span>
         <button class="btn-accion" data-action="agregar-producto" data-id="${fp.productos.id}" title="Traer este producto a esta feria">➕ Traer</button>
       </div>
-    `).join('') || '<p class="inv-empty">No hay productos nuevos para traer de esa feria</p>';
+    `).join('') || '<p class="list-empty">No hay productos nuevos para traer de esa feria</p>';
 
     list.querySelectorAll('[data-action="agregar-producto"]').forEach((btn) => {
       btn.addEventListener('click', async () => {

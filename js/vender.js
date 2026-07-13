@@ -267,7 +267,7 @@ function renderCarrito(feria, container) {
           <span>${l.tipo === 'producto' ? `${escapeHtml(l.nombre)} x${l.cantidad}` : escapeHtml(l.nombre)} — ${formatMoney(l.precio * (l.tipo === 'producto' ? l.cantidad : 1))}</span>
           <button class="btn-accion btn-accion--sm" data-action="quitar-linea" data-index="${i}" title="Quitar del carrito">🗑️ Quitar</button>
         </div>
-      `).join('') || '<p class="inv-empty">Carrito vacío</p>'}
+      `).join('') || '<p class="list-empty">Carrito vacío</p>'}
     </div>
     <div class="carrito-descuento">
       <label>Descuento $ <input type="number" id="input-descuento" min="0" step="1" value="${descuentoActual || ''}" placeholder="0" /></label>

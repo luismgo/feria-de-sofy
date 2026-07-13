@@ -31,18 +31,18 @@ export async function initReporteGeneral({ onVolver }) {
   const cantidadGeneral = Object.values(porFeria).reduce((sum, r) => sum + r.cantidad, 0);
 
   content.innerHTML = `
-    <section class="inv-section">
+    <section class="card">
       <h2>Total combinado</h2>
       <p class="carrito-total">${formatMoney(totalGeneral)} — ${cantidadGeneral} ventas</p>
     </section>
-    <section class="inv-section">
+    <section class="card">
       <h2>Por feria</h2>
       ${Object.values(porFeria).map((r) => `
-        <div class="inv-row">
+        <div class="row">
           <span>${escapeHtml(r.feria.emoji)} ${escapeHtml(r.feria.nombre)}</span>
           <span>${formatMoney(r.total)} (${r.cantidad} ventas)</span>
         </div>
-      `).join('') || '<p class="inv-empty">Todavía no hay ferias</p>'}
+      `).join('') || '<p class="list-empty">Todavía no hay ferias</p>'}
     </section>
   `;
 }
