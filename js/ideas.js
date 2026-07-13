@@ -1,11 +1,11 @@
 import { supabase } from './supabaseClient.js';
-import { confirmDialog, mutar, escapeHtml } from './ui.js';
+import { confirmDialog, mutar, escapeHtml, cargando, emptyState } from './ui.js';
 
 const TIPOS = { producto: '💡 Producto', logistica: '📋 Logística', precio: '💰 Precio/Promo' };
 
 export function initIdeas(feria) {
   const container = document.getElementById('tab-ideas');
-  container.innerHTML = '<p>Cargando ideas...</p>';
+  container.innerHTML = cargando('Cargando ideas...');
   render(feria, container, 'todos');
   return () => {};
 }
@@ -20,26 +20,42 @@ async function render(feria, container, filtro) {
   }
 
   container.innerHTML = `
-    <div class="ideas-filtros">
-      <button data-filtro="todos" class="${filtro === 'todos' ? 'active' : ''}">Todos</button>
-      ${Object.entries(TIPOS).map(([key, label]) => `<button data-filtro="${key}" class="${filtro === key ? 'active' : ''}">${label}</button>`).join('')}
+    <div class="segmented segmented--scroll ideas-filtros" role="group" aria-label="Filtrar ideas">
+      <button type="button" class="segmented__item ${filtro === 'todos' ? 'is-active' : ''}" data-filtro="todos">Todos</button>
+      ${Object.entries(TIPOS).map(([key, label]) => `
+        <button type="button" class="segmented__item ${filtro === key ? 'is-active' : ''}" data-filtro="${key}">${label}</button>
+      `).join('')}
     </div>
     <div id="ideas-list" class="ideas-list">
       ${notas.map((n) => `
         <div class="idea-row ${n.hecho ? 'idea-row--hecho' : ''}" data-id="${n.id}">
-          <input type="checkbox" data-action="toggle-hecho" data-id="${n.id}" ${n.hecho ? 'checked' : ''} title="Marcar como hecho" />
-          <span class="idea-tipo">${TIPOS[n.tipo]}</span>
-          <span class="idea-texto">${escapeHtml(n.texto)}</span>
-          <button class="btn-accion btn-accion--peligro btn-accion--sm" data-action="eliminar-nota" data-id="${n.id}" title="Borrar esta idea">🗑️ Borrar</button>
+          <label class="idea-check" title="Marcar como hecho">
+            <input type="checkbox" data-action="toggle-hecho" data-id="${n.id}" ${n.hecho ? 'checked' : ''} aria-label="Marcar como hecho" />
+          </label>
+          <div class="idea-row__info">
+            <span class="idea-texto">${escapeHtml(n.texto)}</span>
+            <span class="idea-tipo">${TIPOS[n.tipo]}</span>
+          </div>
+          <button class="btn-accion btn-accion--peligro btn-accion--sm" data-action="eliminar-nota" data-id="${n.id}" title="Borrar esta idea">
+            <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg> Borrar
+          </button>
         </div>
-      `).join('') || '<p class="inv-empty">Sin notas todavía</p>'}
+      `).join('') || emptyState('💡', 'Sin ideas todavía', 'Anotá acá lo que se te ocurra en plena feria: productos, precios, pendientes.')}
     </div>
-    <form id="form-nota" class="inv-form">
-      <select name="tipo">
-        ${Object.entries(TIPOS).map(([key, label]) => `<option value="${key}">${label}</option>`).join('')}
-      </select>
-      <input name="texto" placeholder="Escribí tu idea..." required />
-      <button type="submit">Agregar</button>
+    <form id="form-nota" class="card form-nota">
+      <label class="field">
+        <span class="field__label">Nueva idea</span>
+        <input name="texto" class="input" placeholder="Escribí tu idea..." required />
+      </label>
+      <div class="form-nota__fila">
+        <label class="field form-nota__tipo">
+          <span class="field__label">Tipo</span>
+          <select name="tipo" class="input">
+            ${Object.entries(TIPOS).map(([key, label]) => `<option value="${key}">${label}</option>`).join('')}
+          </select>
+        </label>
+        <button type="submit" class="btn btn--primary">Agregar</button>
+      </div>
     </form>
   `;
 

@@ -5,22 +5,47 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
   <title>Feria de Sofy</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
 </head>
 <body>
+  <!-- Sprite de iconos del chrome (trazo, heredan currentColor vía .icon) -->
+  <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+    <symbol id="i-vender" viewBox="0 0 24 24"><path d="M5.5 7.5h13l-1.1 12a1.6 1.6 0 0 1-1.6 1.5H8.2a1.6 1.6 0 0 1-1.6-1.5l-1.1-12z"/><path d="M9 10.5v-4a3 3 0 0 1 6 0v4"/></symbol>
+    <symbol id="i-inventario" viewBox="0 0 24 24"><path d="M4 8l8-4 8 4v8l-8 4-8-4V8z"/><path d="M4 8l8 4 8-4"/><path d="M12 12v8"/></symbol>
+    <symbol id="i-ideas" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 1 4 10.5c-.8.7-1 1.5-1 2.5h-6c0-1-.2-1.8-1-2.5A6 6 0 0 1 12 3z"/><path d="M9.5 19.5h5"/><path d="M10.5 22h3"/></symbol>
+    <symbol id="i-reportes" viewBox="0 0 24 24"><path d="M5 20v-8"/><path d="M12 20V5"/><path d="M19 20v-5"/><path d="M3.5 20.5h17"/></symbol>
+    <symbol id="i-atras" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
+    <symbol id="i-mas" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-menos" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+    <symbol id="i-cerrar" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 6.5h15"/><path d="M8 6.5V5a1.5 1.5 0 0 1 1.5-1.5h5A1.5 1.5 0 0 1 16 5v1.5"/><path d="M6.5 6.5l.8 13a1.6 1.6 0 0 0 1.6 1.5h6.2a1.6 1.6 0 0 0 1.6-1.5l.8-13"/><path d="M10 10.5v6M14 10.5v6"/></symbol>
+    <symbol id="i-editar" viewBox="0 0 24 24"><path d="M4 20l1-4L16.5 4.5a2.1 2.1 0 0 1 3 3L8 19l-4 1z"/><path d="M14.5 6.5l3 3"/></symbol>
+    <symbol id="i-anular" viewBox="0 0 24 24"><path d="M8 5L3.5 9.5 8 14"/><path d="M3.5 9.5H15a5.5 5.5 0 0 1 0 11h-4"/></symbol>
+    <symbol id="i-pausa" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 5l12 7-12 7V5z"/></symbol>
+    <symbol id="i-buscar" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l5 5"/></symbol>
+    <symbol id="i-quitar" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M8.5 12h7"/></symbol>
+    <symbol id="i-traer" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 8.5v7M8.5 12h7"/></symbol>
+  </svg>
+
   <div id="connection-banner" class="banner banner--offline hidden">📡 Sin conexión — no se pueden confirmar ventas hasta reconectar</div>
 
   <section id="login-gate" class="screen">
     <div class="pin-card">
       <h1>🌸 Feria de Sofy</h1>
-      <p>Ingresá tu correo para entrar</p>
+      <p class="card__hint">Tu puesto de feria, en el celular</p>
       <form id="login-form">
-        <input id="login-email" type="email" placeholder="tu@correo.com" required autocomplete="email" />
-        <button type="submit">Enviar link</button>
+        <label class="field">
+          <span class="field__label">Tu correo</span>
+          <input id="login-email" class="input" type="email" placeholder="tu@correo.com" required autocomplete="email" />
+          <span class="field__hint">Te mandamos un enlace para entrar, sin contraseña.</span>
+        </label>
+        <button type="submit" class="btn btn--primary btn--block">Enviarme el enlace</button>
       </form>
-      <p id="login-message" class="hidden"></p>
+      <p id="login-message" class="login-msg hidden"></p>
     </div>
   </section>
 
@@ -28,16 +53,16 @@
     <h1>🌸 Feria de Sofy</h1>
     <p>¿En cuál feria vas a trabajar?</p>
     <div id="feria-cards" class="feria-cards"></div>
-    <button id="btn-nueva-feria" class="btn btn--secondary">+ Nueva feria</button>
-    <button id="btn-reporte-general" class="btn btn--secondary">📊 Reporte general</button>
+    <button id="btn-nueva-feria" class="btn btn--primary"><svg class="icon" aria-hidden="true"><use href="#i-mas"/></svg> Nueva feria</button>
+    <button id="btn-reporte-general" class="btn btn--quiet">📊 Reporte general</button>
   </section>
 
   <section id="reporte-general" class="screen hidden">
     <header class="navbar">
       <button class="navbar__back" id="btn-volver-selector" aria-label="Volver a la lista de ferias">
-        <span aria-hidden="true">‹</span> Ferias
+        <svg class="icon" aria-hidden="true"><use href="#i-atras"/></svg> Ferias
       </button>
-      <h1 class="navbar__title">📊 Reporte general</h1>
+      <h1 class="navbar__title">Reporte general</h1>
       <span class="navbar__trailing" aria-hidden="true"></span>
     </header>
     <div class="feria-scroll" id="reporte-general-content"></div>
@@ -46,7 +71,7 @@
   <section id="feria-view" class="screen hidden" data-tab="vender">
     <header class="navbar">
       <button class="navbar__back" id="btn-cambiar-feria" aria-label="Volver a la lista de ferias">
-        <span aria-hidden="true">‹</span> Ferias
+        <svg class="icon" aria-hidden="true"><use href="#i-atras"/></svg> Ferias
       </button>
       <h1 class="navbar__title" id="feria-titulo"></h1>
       <span class="navbar__trailing" aria-hidden="true"></span>
@@ -65,19 +90,19 @@
 
     <nav class="tabbar" aria-label="Secciones de la feria">
       <button class="tabbar__item is-active" data-tab="vender" aria-current="page">
-        <span class="tabbar__icon" aria-hidden="true">🛒</span>
+        <svg class="icon tabbar__icon" aria-hidden="true"><use href="#i-vender"/></svg>
         <span class="tabbar__label">Vender</span>
       </button>
       <button class="tabbar__item" data-tab="inventario">
-        <span class="tabbar__icon" aria-hidden="true">📦</span>
+        <svg class="icon tabbar__icon" aria-hidden="true"><use href="#i-inventario"/></svg>
         <span class="tabbar__label">Inventario</span>
       </button>
       <button class="tabbar__item" data-tab="ideas">
-        <span class="tabbar__icon" aria-hidden="true">💡</span>
+        <svg class="icon tabbar__icon" aria-hidden="true"><use href="#i-ideas"/></svg>
         <span class="tabbar__label">Ideas</span>
       </button>
       <button class="tabbar__item" data-tab="reportes">
-        <span class="tabbar__icon" aria-hidden="true">📊</span>
+        <svg class="icon tabbar__icon" aria-hidden="true"><use href="#i-reportes"/></svg>
         <span class="tabbar__label">Reportes</span>
       </button>
     </nav>

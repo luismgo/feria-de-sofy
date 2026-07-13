@@ -24,7 +24,7 @@ export function initAuth(onSignedIn) {
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    message.classList.add('hidden');
+    message.className = 'login-msg hidden';
     submitBtn.disabled = true;
     submitBtn.textContent = 'Enviando...';
 
@@ -37,15 +37,14 @@ export function initAuth(onSignedIn) {
     });
 
     submitBtn.disabled = false;
-    submitBtn.textContent = 'Enviar link';
-    message.classList.remove('hidden');
+    submitBtn.textContent = 'Enviarme el enlace';
 
     if (error) {
-      message.textContent = `No pudimos enviarte el link: ${error.message}`;
-      message.classList.add('error');
+      message.textContent = `No pudimos enviarte el enlace: ${error.message}`;
+      message.className = 'login-msg login-msg--error';
     } else {
-      message.textContent = 'Revisá tu correo 💌 — te mandamos un link para entrar';
-      message.classList.remove('error');
+      message.textContent = 'Revisá tu correo 💌 — te mandamos un enlace para entrar';
+      message.className = 'login-msg login-msg--ok';
     }
   });
 }
