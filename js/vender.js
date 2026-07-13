@@ -1,30 +1,35 @@
 import { supabase } from './supabaseClient.js';
-import { toast, escapeHtml, formatMoney, promptDialog, uuid, confirmDialog } from './ui.js';
+import { toast, escapeHtml, formatMoney, promptDialog, uuid, confirmDialog, abrirModal, cargando, emptyState } from './ui.js';
 import { isOnline } from './connection.js';
 
 let realtimeChannel = null;
-let carrito = []; // { tipo: 'producto', productoId, nombre, precio, cantidad } | { tipo: 'combo', comboId, nombre, precio, productos: [{id, nombre}] }
+let carrito = []; // { tipo:'producto', productoId, nombre, precio, cantidad } | { tipo:'combo', comboId, nombre, precio, productos:[{id,nombre}] } | { tipo:'manual', nombre, precio }
 let metodoPagoActual = 'efectivo';
 let clientVentaIdPendiente = null;
 let descuentoActual = 0;
+let pagaConActual = ''; // "¿con cuánto te paga?" — sólo UI, nunca viaja al RPC
 let filtroBusqueda = '';
 let rankingCongelado = []; // ids de producto ordenados por más vendidos, calculado 1 vez por sesión de feria
 let feriaProductosActuales = [];
 let combosActuales = [];
 let sheetAbierta = false;
+let ultimoCountDock = 0;
 
 export function initVender(feria) {
   carrito = [];
   metodoPagoActual = 'efectivo';
   clientVentaIdPendiente = null;
   descuentoActual = 0;
+  pagaConActual = '';
   filtroBusqueda = '';
   rankingCongelado = [];
   feriaProductosActuales = [];
   combosActuales = [];
+  ultimoCountDock = 0;
+  restaurarCarrito(feria.id); // un refresh en plena feria no pierde el carrito
   resetCarritoUI();
   const container = document.getElementById('tab-vender');
-  container.innerHTML = '<p>Cargando productos...</p>';
+  container.innerHTML = cargando('Cargando productos...');
 
   // initVender NO puede ser async (devuelve la función de cleanup a nav.js), así que
   // no se puede `await`. Se re-renderiza cuando el ranking resuelve, para que el orden
@@ -50,6 +55,44 @@ export function initVender(feria) {
   };
 }
 
+// --- Persistencia del carrito (sobrevivir un refresh accidental en plena feria) ---
+
+function persistirCarrito(feriaId) {
+  try {
+    if (carrito.length === 0) localStorage.removeItem(`carrito:${feriaId}`);
+    else localStorage.setItem(`carrito:${feriaId}`, JSON.stringify({ carrito, descuento: descuentoActual, metodo: metodoPagoActual }));
+  } catch { /* almacenamiento bloqueado o lleno: la app sigue sin persistir */ }
+}
+
+function restaurarCarrito(feriaId) {
+  try {
+    const raw = localStorage.getItem(`carrito:${feriaId}`);
+    if (!raw) return;
+    const guardado = JSON.parse(raw);
+    if (Array.isArray(guardado.carrito)) carrito = guardado.carrito;
+    descuentoActual = Math.max(0, Number(guardado.descuento) || 0);
+    if (guardado.metodo === 'efectivo' || guardado.metodo === 'transferencia') metodoPagoActual = guardado.metodo;
+  } catch { /* dato corrupto: se empieza con carrito vacío */ }
+}
+
+// Un carrito restaurado (o uno viejo tras vender en otro dispositivo) puede pedir más
+// stock del que queda: se recorta acá por UX; el RPC igual valida server-side.
+function clampCarritoContraStock(feriaId) {
+  let cambiado = false;
+  carrito = carrito.filter((l) => {
+    if (l.tipo !== 'producto') return true; // combos y manuales los valida el RPC
+    const fp = feriaProductosActuales.find((f) => f.productos.id === l.productoId);
+    if (!fp || fp.productos.stock <= 0) { cambiado = true; return false; }
+    if (l.cantidad > fp.productos.stock) { l.cantidad = fp.productos.stock; cambiado = true; }
+    return true;
+  });
+  if (cambiado) {
+    clientVentaIdPendiente = null;
+    persistirCarrito(feriaId);
+    toast('El carrito se ajustó al stock disponible');
+  }
+}
+
 async function loadAndRender(feria, container, { refrescarCarrito = true } = {}) {
   const [{ data: feriaProductos, error: prodError }, { data: combos, error: comboError }] = await Promise.all([
     supabase.from('feria_productos').select('id, categoria_precio_id, precio_override, productos(id, nombre, imagen_url, stock), categorias_precio(precio)').eq('feria_id', feria.id),
@@ -63,6 +106,7 @@ async function loadAndRender(feria, container, { refrescarCarrito = true } = {})
 
   feriaProductosActuales = feriaProductos || [];
   combosActuales = combos || [];
+  if (refrescarCarrito) clampCarritoContraStock(feria.id);
   renderGrid(feria, feriaProductosActuales, combosActuales, container);
   if (refrescarCarrito) renderCarrito(feria, container);
 }
@@ -101,17 +145,26 @@ function renderGrid(feria, feriaProductos, combos, container) {
 
   container.innerHTML = '';
 
-  const buscador = document.createElement('input');
-  buscador.className = 'vender-buscador';
-  buscador.type = 'search';
-  buscador.placeholder = '🔎 Buscar producto...';
-  buscador.value = filtroBusqueda;
-  buscador.addEventListener('input', () => {
-    filtroBusqueda = buscador.value;
-    const grid = container.querySelector('.productos-grid');
-    if (grid) aplicarFiltroBusqueda(grid); // sin re-render: conserva foco y posición del cursor
-  });
-  container.appendChild(buscador);
+  const sinNada = feriaProductos.length === 0 && combos.length === 0;
+
+  if (!sinNada) {
+    const buscador = document.createElement('input');
+    buscador.className = 'vender-buscador';
+    buscador.type = 'search';
+    buscador.placeholder = 'Buscar producto...';
+    buscador.setAttribute('aria-label', 'Buscar producto');
+    buscador.value = filtroBusqueda;
+    buscador.addEventListener('input', () => {
+      filtroBusqueda = buscador.value;
+      const grid = container.querySelector('.productos-grid');
+      if (grid) aplicarFiltroBusqueda(grid); // sin re-render: conserva foco y posición del cursor
+    });
+    container.appendChild(buscador);
+  } else {
+    const vacio = document.createElement('div');
+    vacio.innerHTML = emptyState('🌸', 'Sin productos todavía', 'Agregalos en la pestaña Inventario y acá aparecen para vender.');
+    container.appendChild(vacio.firstElementChild);
+  }
 
   if (combos.length > 0) {
     const combosRow = document.createElement('div');
@@ -119,7 +172,7 @@ function renderGrid(feria, feriaProductos, combos, container) {
     combos.forEach((combo) => {
       const btn = document.createElement('button');
       btn.className = 'combo-btn';
-      btn.textContent = `${combo.nombre} — ${formatMoney(combo.precio)}`;
+      btn.textContent = `${combo.nombre} · ${formatMoney(combo.precio)}`;
       btn.addEventListener('click', () => agregarComboAlCarrito(combo, feriaProductos, feria, container));
       combosRow.appendChild(btn);
     });
@@ -168,10 +221,21 @@ function renderGrid(feria, feriaProductos, combos, container) {
     card.disabled = disponible <= 0;
     card.innerHTML = `${media}${nombre}
       <span class="producto-card__precio">${formatMoney(precio)}</span>
-      <span class="producto-card__stock">${disponible > 0 ? `Disponible: ${disponible}` : 'Sin stock'}</span>`;
+      <span class="producto-card__stock ${disponible > 0 ? '' : 'producto-card__stock--agotado'}">${disponible > 0 ? `Quedan ${disponible}` : 'Agotado'}</span>`;
     card.addEventListener('click', () => agregarProductoAlCarrito(p, precio, feria, container));
     grid.appendChild(card);
   });
+
+  // "Otro monto": vender algo fuera de la lista (encargo, precio especial) — línea manual del RPC.
+  const otroBtn = document.createElement('button');
+  otroBtn.className = 'producto-card producto-card--otro';
+  otroBtn.innerHTML = `
+    <span class="producto-card__otro-icono" aria-hidden="true"><svg class="icon"><use href="#i-mas"/></svg></span>
+    <span class="producto-card__nombre">Otro monto</span>
+    <span class="producto-card__stock">Algo fuera de la lista</span>`;
+  otroBtn.addEventListener('click', () => abrirOtroMonto(feria, container));
+  grid.appendChild(otroBtn);
+
   container.appendChild(grid);
   aplicarFiltroBusqueda(grid); // conserva el filtro activo tras un re-render (ej. agregar al carrito)
 
@@ -179,6 +243,38 @@ function renderGrid(feria, feriaProductos, combos, container) {
     const nb = container.querySelector('.vender-buscador');
     if (nb) { nb.focus(); try { nb.setSelectionRange(selStart, selEnd); } catch { /* type=search sin selección: ignorar */ } }
   }
+}
+
+function abrirOtroMonto(feria, container) {
+  const { dialogo, cerrar } = abrirModal({
+    titulo: 'Cobrar otro monto',
+    contenidoHTML: `
+      <p class="card__hint">Para vender algo que no está en la lista (un encargo, un precio especial). No descuenta stock.</p>
+      <label class="field">
+        <span class="field__label">Monto en pesos</span>
+        <input type="number" class="input" id="otro-monto-valor" min="1" inputmode="numeric" placeholder="Ej: 5000" autofocus />
+      </label>
+      <label class="field">
+        <span class="field__label">Qué es (opcional)</span>
+        <input type="text" class="input" id="otro-monto-nota" placeholder="Ej: encargo de pulsera" />
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="btn btn--secondary" data-action="cancelar">Cancelar</button>
+        <button type="button" class="btn btn--primary" data-action="agregar">Agregar al carrito</button>
+      </div>`,
+  });
+  dialogo.addEventListener('click', (e) => {
+    const action = e.target.closest('[data-action]')?.dataset.action;
+    if (action === 'cancelar') cerrar(null);
+    if (action === 'agregar') {
+      const monto = Number(dialogo.querySelector('#otro-monto-valor').value);
+      if (!Number.isFinite(monto) || monto <= 0) { toast('Poné un monto válido mayor a 0.'); return; }
+      const nota = dialogo.querySelector('#otro-monto-nota').value.trim();
+      carrito.push({ tipo: 'manual', nombre: nota || 'Venta manual', precio: monto });
+      cerrar(true);
+      refrescarVenta(feria, container);
+    }
+  });
 }
 
 function agregarProductoAlCarrito(producto, precio, feria, container) {
@@ -193,9 +289,10 @@ function agregarProductoAlCarrito(producto, precio, feria, container) {
   refrescarVenta(feria, container);
 }
 
-// Re-dibuja grilla (recalcula "Disponible" en cliente) y carrito (dock + hoja) tras un cambio del carrito.
+// Re-dibuja grilla (recalcula "Quedan N" en cliente) y carrito (dock + hoja) tras un cambio del carrito.
 function refrescarVenta(feria, container) {
   clientVentaIdPendiente = null; // el carrito cambió => nueva venta lógica
+  persistirCarrito(feria.id);
   renderGrid(feria, feriaProductosActuales, combosActuales, container);
   renderCarrito(feria, container);
 }
@@ -232,7 +329,18 @@ export function cerrarSheet() {
   sheetAbierta = false;
 }
 
-function onSheetKeydown(e) { if (e.key === 'Escape') cerrarSheet(); }
+function onSheetKeydown(e) {
+  // Si hay un modal encima de la hoja (confirmar vaciado, otro monto), su Escape
+  // es del modal: la hoja no se cierra por debajo.
+  if (e.key === 'Escape' && !document.querySelector('.modal-overlay')) cerrarSheet();
+}
+
+// Texto secundario de una línea del carrito según su tipo.
+function detalleLinea(l) {
+  if (l.tipo === 'producto') return `${formatMoney(l.precio)} c/u`;
+  if (l.tipo === 'combo') return l.productos.map((p) => p.nombre).join(', ');
+  return 'Monto libre';
+}
 
 function renderCarrito(feria, container) {
   const dock = document.getElementById('carrito-dock');
@@ -244,46 +352,98 @@ function renderCarrito(feria, container) {
   descuentoActual = Math.min(descuentoActual, bruto); // re-clamp: si el carrito se achicó, el descuento no puede superar el nuevo bruto
   const total = Math.max(0, bruto - descuentoActual);
   const count = carrito.reduce((sum, l) => sum + (l.tipo === 'producto' ? l.cantidad : 1), 0);
+  const etiquetaCobrar = `Confirmar venta · ${formatMoney(total)}`;
 
   // --- Mini-dock: resumen compacto encima de la tab bar (se muestra sólo en Vender con ítems) ---
   dock.classList.toggle('has-items', carrito.length > 0);
   dock.innerHTML = `
-    <span class="carrito-dock__resumen">🛒 ${count} · ${formatMoney(total)}</span>
-    <span class="carrito-dock__cta">Cobrar ›</span>
+    <span class="carrito-dock__resumen">
+      <svg class="icon" aria-hidden="true"><use href="#i-vender"/></svg>
+      <span class="dock-badge${count !== ultimoCountDock && count > 0 ? ' dock-badge--bump' : ''}">${count}</span>
+      <span class="monto">${formatMoney(total)}</span>
+    </span>
+    <span class="carrito-dock__cta">Cobrar <svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></span>
   `;
+  ultimoCountDock = count;
   dock.onclick = () => abrirSheet();
   if (backdrop) backdrop.onclick = () => cerrarSheet();
 
-  // --- Hoja: carrito completo (líneas, descuento, método, Vaciar/Confirmar) ---
+  // --- Hoja: head fijo + body con scroll + footer siempre visible (total y CTA nunca tapados) ---
+  const lineas = carrito.map((l, i) => {
+    if (l.tipo === 'producto') {
+      const fp = feriaProductosActuales.find((f) => f.productos.id === l.productoId);
+      const quedan = fp ? fp.productos.stock - cantidadEnCarrito(l.productoId) : 0;
+      return `
+        <div class="carrito-linea" data-index="${i}">
+          <div class="carrito-linea__info">
+            <span class="carrito-linea__nombre">${escapeHtml(l.nombre)}</span>
+            <span class="carrito-linea__detalle">${detalleLinea(l)}</span>
+          </div>
+          <div class="stepper" aria-label="Cantidad de ${escapeHtml(l.nombre)}">
+            <button type="button" class="stepper__btn" data-action="linea-menos" data-index="${i}" aria-label="Una unidad menos">
+              <svg class="icon" aria-hidden="true"><use href="#i-menos"/></svg>
+            </button>
+            <span class="stepper__qty">${l.cantidad}</span>
+            <button type="button" class="stepper__btn" data-action="linea-mas" data-index="${i}" aria-label="Una unidad más" ${quedan <= 0 ? 'disabled' : ''}>
+              <svg class="icon" aria-hidden="true"><use href="#i-mas"/></svg>
+            </button>
+          </div>
+          <span class="carrito-linea__total monto">${formatMoney(l.precio * l.cantidad)}</span>
+        </div>`;
+    }
+    return `
+      <div class="carrito-linea" data-index="${i}">
+        <div class="carrito-linea__info">
+          <span class="carrito-linea__nombre">${escapeHtml(l.nombre)}</span>
+          <span class="carrito-linea__detalle">${escapeHtml(detalleLinea(l))}</span>
+        </div>
+        <button type="button" class="btn-accion btn-accion--sm" data-action="quitar-linea" data-index="${i}" title="Quitar del carrito">
+          <svg class="icon" aria-hidden="true"><use href="#i-quitar"/></svg> Quitar
+        </button>
+        <span class="carrito-linea__total monto">${formatMoney(l.precio)}</span>
+      </div>`;
+  }).join('') || '<p class="list-empty">Carrito vacío</p>';
+
   sheet.innerHTML = `
     <div class="carrito-sheet__handle" aria-hidden="true"></div>
-    <div class="carrito-sheet__head">
-      <h3>🛒 Carrito</h3>
-      <button type="button" class="btn-accion btn-accion--sm" id="btn-cerrar-sheet" aria-label="Cerrar carrito">✕ Cerrar</button>
+    <div class="sheet__head">
+      <h3>Carrito</h3>
+      <button type="button" class="btn-accion btn-accion--sm" id="btn-cerrar-sheet" aria-label="Cerrar carrito">
+        <svg class="icon" aria-hidden="true"><use href="#i-cerrar"/></svg> Cerrar
+      </button>
     </div>
-    <div class="carrito-lineas">
-      ${carrito.map((l, i) => `
-        <div class="carrito-linea" data-index="${i}">
-          <span>${l.tipo === 'producto' ? `${escapeHtml(l.nombre)} x${l.cantidad}` : escapeHtml(l.nombre)} — ${formatMoney(l.precio * (l.tipo === 'producto' ? l.cantidad : 1))}</span>
-          <button class="btn-accion btn-accion--sm" data-action="quitar-linea" data-index="${i}" title="Quitar del carrito">🗑️ Quitar</button>
+    <div class="sheet__body">
+      <div class="carrito-lineas">${lineas}</div>
+      <label class="field carrito-descuento">
+        <span class="field__label">Descuento en pesos (opcional)</span>
+        <input type="number" id="input-descuento" class="input" min="0" step="1" inputmode="numeric" value="${descuentoActual || ''}" placeholder="0" />
+      </label>
+    </div>
+    <div class="sheet__footer">
+      <div class="carrito-resumen">
+        ${descuentoActual ? `
+          <div class="linea-resumen"><span>Subtotal</span><span class="monto">${formatMoney(bruto)}</span></div>
+          <div class="linea-resumen linea-resumen--desc"><span>Descuento</span><span class="monto">−${formatMoney(descuentoActual)}</span></div>` : ''}
+        <div class="linea-resumen linea-resumen--total"><span>Total</span><span class="monto">${formatMoney(total)}</span></div>
+      </div>
+      <div class="carrito-pago">
+        <span class="field__label">¿Cómo te paga?</span>
+        <div class="segmented" role="group" aria-label="Método de pago">
+          <button type="button" class="segmented__item ${metodoPagoActual === 'efectivo' ? 'is-active' : ''}" data-metodo="efectivo">💵 Efectivo</button>
+          <button type="button" class="segmented__item ${metodoPagoActual === 'transferencia' ? 'is-active' : ''}" data-metodo="transferencia">📲 Transferencia</button>
         </div>
-      `).join('') || '<p class="list-empty">Carrito vacío</p>'}
-    </div>
-    <div class="carrito-descuento">
-      <label>Descuento $ <input type="number" id="input-descuento" min="0" step="1" value="${descuentoActual || ''}" placeholder="0" /></label>
-    </div>
-    <p class="carrito-total">Total: ${formatMoney(total)}${descuentoActual ? ` <s>${formatMoney(bruto)}</s>` : ''}</p>
-    <div class="carrito-pago">
-      <span>Pago:</span>
-      ${['efectivo', 'transferencia'].map((m) => `
-        <button type="button" class="pago-btn ${metodoPagoActual === m ? 'active' : ''}" data-metodo="${m}">
-          ${m === 'efectivo' ? '💵 Efectivo' : '📲 Transferencia'}
-        </button>
-      `).join('')}
-    </div>
-    <div class="carrito-actions">
-      <button class="btn btn--secondary" id="btn-vaciar-carrito" ${carrito.length === 0 ? 'disabled' : ''}>Vaciar</button>
-      <button class="btn" id="btn-confirmar-venta" ${carrito.length === 0 ? 'disabled' : ''}>Confirmar venta</button>
+      </div>
+      <div class="vuelto ${metodoPagoActual === 'efectivo' ? '' : 'hidden'}" id="vuelto-bloque">
+        <label class="field">
+          <span class="field__label">¿Con cuánto te paga? (para calcular el vuelto)</span>
+          <input type="number" id="input-paga-con" class="input" min="0" inputmode="numeric" placeholder="Ej: 20000" value="${pagaConActual}" />
+        </label>
+        <p class="vuelto__resultado" id="vuelto-resultado" role="status"></p>
+      </div>
+      <div class="carrito-actions">
+        <button class="btn btn--secondary" id="btn-vaciar-carrito" ${carrito.length === 0 ? 'disabled' : ''}>Vaciar</button>
+        <button class="btn btn--primary" id="btn-confirmar-venta" ${carrito.length === 0 ? 'disabled' : ''}>${etiquetaCobrar}</button>
+      </div>
     </div>
   `;
 
@@ -297,19 +457,48 @@ function renderCarrito(feria, container) {
     });
   });
 
+  // Steppers: mutan la cantidad y re-renderizan; el foco vuelve al mismo botón
+  // para que con teclado no salte al body tras el re-render.
+  sheet.querySelectorAll('[data-action="linea-menos"], [data-action="linea-mas"]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const i = Number(btn.dataset.index);
+      const accion = btn.dataset.action;
+      const linea = carrito[i];
+      if (!linea || linea.tipo !== 'producto') return;
+      if (accion === 'linea-mas') {
+        const fp = feriaProductosActuales.find((f) => f.productos.id === linea.productoId);
+        const quedan = fp ? fp.productos.stock - cantidadEnCarrito(linea.productoId) : 0;
+        if (quedan <= 0) { toast('No queda más stock disponible de ese producto'); return; }
+        linea.cantidad += 1;
+      } else {
+        linea.cantidad -= 1;
+        if (linea.cantidad <= 0) carrito.splice(i, 1);
+      }
+      if (carrito.length === 0) cerrarSheet();
+      refrescarVenta(feria, container);
+      const mismo = sheet.querySelector(`[data-action="${accion}"][data-index="${i}"]`);
+      if (mismo && !mismo.disabled) mismo.focus();
+    });
+  });
+
   sheet.querySelector('#btn-vaciar-carrito').addEventListener('click', async () => {
     if (carrito.length === 0) return;
     const ok = await confirmDialog('¿Vaciar el carrito? Se quitan todos los productos que agregaste.');
     if (!ok) return;
     carrito = [];
+    pagaConActual = '';
     cerrarSheet();
     refrescarVenta(feria, container);
   });
 
-  sheet.querySelectorAll('.pago-btn').forEach((btn) => {
+  // Método de pago: se togglea sin re-render (no roba foco); el bloque de vuelto
+  // sólo tiene sentido en efectivo.
+  sheet.querySelectorAll('.segmented__item').forEach((btn) => {
     btn.addEventListener('click', () => {
       metodoPagoActual = btn.dataset.metodo;
-      sheet.querySelectorAll('.pago-btn').forEach((b) => b.classList.toggle('active', b.dataset.metodo === metodoPagoActual));
+      sheet.querySelectorAll('.segmented__item').forEach((b) => b.classList.toggle('is-active', b.dataset.metodo === metodoPagoActual));
+      sheet.querySelector('#vuelto-bloque').classList.toggle('hidden', metodoPagoActual !== 'efectivo');
+      persistirCarrito(feria.id);
     });
   });
 
@@ -318,9 +507,32 @@ function renderCarrito(feria, container) {
     inputDescuento.addEventListener('change', () => {
       const val = Math.max(0, Number(inputDescuento.value) || 0);
       descuentoActual = Math.min(val, bruto);
+      persistirCarrito(feria.id);
       renderCarrito(feria, container); // change dispara en blur: re-render seguro, no roba foco
     });
   }
+
+  // Calculadora de vuelto: 100% cliente, actualiza en vivo SIN re-render (conserva el foco).
+  const inputPagaCon = sheet.querySelector('#input-paga-con');
+  const vueltoResultado = sheet.querySelector('#vuelto-resultado');
+  const actualizarVuelto = () => {
+    pagaConActual = inputPagaCon.value;
+    const paga = Number(inputPagaCon.value);
+    if (inputPagaCon.value === '' || !Number.isFinite(paga)) {
+      vueltoResultado.textContent = '';
+      vueltoResultado.className = 'vuelto__resultado';
+      return;
+    }
+    if (paga >= total) {
+      vueltoResultado.textContent = `Vuelto: ${formatMoney(paga - total)}`;
+      vueltoResultado.className = 'vuelto__resultado vuelto__resultado--ok';
+    } else {
+      vueltoResultado.textContent = `Falta ${formatMoney(total - paga)}`;
+      vueltoResultado.className = 'vuelto__resultado vuelto__resultado--falta';
+    }
+  };
+  inputPagaCon.addEventListener('input', actualizarVuelto);
+  actualizarVuelto();
 
   sheet.querySelector('#btn-confirmar-venta').addEventListener('click', async () => {
     if (!isOnline()) {
@@ -335,10 +547,11 @@ function renderCarrito(feria, container) {
     // idempotencia: un id estable por carrito; si reintentás, no se cobra dos veces
     if (!clientVentaIdPendiente) clientVentaIdPendiente = uuid();
 
-    const items = carrito.map((l) => l.tipo === 'producto'
-      ? { tipo: 'producto', producto_id: l.productoId, cantidad: l.cantidad }
-      : { tipo: 'combo', combo_id: l.comboId, producto_ids: l.productos.map((p) => p.id) }
-    );
+    const items = carrito.map((l) => {
+      if (l.tipo === 'producto') return { tipo: 'producto', producto_id: l.productoId, cantidad: l.cantidad };
+      if (l.tipo === 'combo') return { tipo: 'combo', combo_id: l.comboId, producto_ids: l.productos.map((p) => p.id) };
+      return { tipo: 'manual', nombre: l.nombre, precio: l.precio };
+    });
 
     const controller = new AbortController();
     let timedOut = false;
@@ -364,7 +577,7 @@ function renderCarrito(feria, container) {
     }
 
     btn.disabled = false;
-    btn.textContent = 'Confirmar venta';
+    btn.textContent = etiquetaCobrar;
 
     // `timedOut` es la señal determinística de nuestro propio timeout (no depende de
     // matchear el texto del error); el regex cubre además un abort de otra fuente.
@@ -373,7 +586,7 @@ function renderCarrito(feria, container) {
       return;
     }
     if (error) {
-      toast(`No se pudo confirmar la venta: ${error.message}`);
+      toast(`No se pudo confirmar la venta: ${error.message}`, { tipo: 'error' });
       return;
     }
 
@@ -381,9 +594,11 @@ function renderCarrito(feria, container) {
     clientVentaIdPendiente = null;
     metodoPagoActual = 'efectivo';
     descuentoActual = 0;
+    pagaConActual = '';
+    persistirCarrito(feria.id);
     cerrarSheet();
     if (window.confetti) window.confetti({ particleCount: 120, spread: 80, origin: { y: 0.7 } });
-    toast(`¡Venta registrada! 🎉 Total: ${formatMoney(data[0].total)}`);
+    toast(`¡Venta registrada! 🎉 Total: ${formatMoney(data[0].total)}`, { tipo: 'exito' });
     loadAndRender(feria, container);
   });
 }
@@ -405,50 +620,53 @@ async function agregarComboAlCarrito(combo, feriaProductos, feria, container) {
   refrescarVenta(feria, container);
 }
 
-function seleccionarProductosCombo(combo, disponibles) {
-  return new Promise((resolve) => {
-    const overlay = document.createElement('div');
-    overlay.className = 'modal-overlay';
-    const seleccion = new Set();
-
-    function render() {
-      overlay.innerHTML = `
-        <div class="modal modal--combo">
-          <p>Elegí ${combo.cantidad} productos para "${escapeHtml(combo.nombre)}" (${seleccion.size}/${combo.cantidad})</p>
-          <div class="combo-picker-grid">
-            ${disponibles.map((p) => `
-              <button class="combo-picker-item ${seleccion.has(p.id) ? 'selected' : ''}" data-id="${p.id}">${escapeHtml(p.nombre)}</button>
-            `).join('')}
-          </div>
-          <div class="modal-actions">
-            <button class="btn btn--secondary" data-action="cancelar">Cancelar</button>
-            <button class="btn" data-action="confirmar" ${seleccion.size !== combo.cantidad ? 'disabled' : ''}>Confirmar</button>
-          </div>
-        </div>
-      `;
-    }
-
-    render();
-    document.body.appendChild(overlay);
-
-    overlay.addEventListener('click', (e) => {
-      const id = e.target.dataset.id;
-      if (id) {
-        if (seleccion.has(id)) seleccion.delete(id);
-        else if (seleccion.size < combo.cantidad) seleccion.add(id);
-        render();
-        return;
-      }
-      const action = e.target.dataset.action;
-      if (action === 'cancelar') {
-        document.body.removeChild(overlay);
-        resolve(null);
-      } else if (action === 'confirmar' && seleccion.size === combo.cantidad) {
-        document.body.removeChild(overlay);
-        resolve(disponibles.filter((p) => seleccion.has(p.id)).map((p) => ({ id: p.id, nombre: p.nombre })));
-      }
-    });
+async function seleccionarProductosCombo(combo, disponibles) {
+  const seleccion = new Set();
+  const { dialogo, cerrar, cerrado } = abrirModal({
+    titulo: combo.nombre,
+    claseExtra: 'modal--combo',
+    contenidoHTML: '<div id="combo-body"></div>',
   });
+  const body = dialogo.querySelector('#combo-body');
+
+  const render = () => {
+    body.innerHTML = `
+      <p class="card__hint">Elegí los ${combo.cantidad} productos del combo (llevás ${seleccion.size} de ${combo.cantidad})</p>
+      <div class="combo-picker-grid">
+        ${disponibles.map((p) => `
+          <button type="button" class="combo-picker-item ${seleccion.has(p.id) ? 'selected' : ''}" data-id="${p.id}">
+            ${p.imagen_url ? `<img src="${p.imagen_url}" alt="" />` : '<span class="combo-picker-item__sin-foto" aria-hidden="true">🌸</span>'}
+            <span class="combo-picker-item__nombre">${escapeHtml(p.nombre)}</span>
+          </button>
+        `).join('')}
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn--secondary" data-action="cancelar">Cancelar</button>
+        <button type="button" class="btn btn--primary" data-action="confirmar" ${seleccion.size !== combo.cantidad ? 'disabled' : ''}>Agregar al carrito</button>
+      </div>
+    `;
+  };
+  render();
+
+  // Delegación sobre el diálogo: el body se re-renderiza en cada toque.
+  dialogo.addEventListener('click', (e) => {
+    const item = e.target.closest('[data-id]');
+    if (item) {
+      const id = item.dataset.id;
+      if (seleccion.has(id)) seleccion.delete(id);
+      else if (seleccion.size < combo.cantidad) seleccion.add(id);
+      render();
+      return;
+    }
+    const action = e.target.closest('[data-action]')?.dataset.action;
+    if (action === 'cancelar') cerrar(null);
+    if (action === 'confirmar' && seleccion.size === combo.cantidad) {
+      cerrar(disponibles.filter((p) => seleccion.has(p.id)).map((p) => ({ id: p.id, nombre: p.nombre })));
+    }
+  });
+
+  const val = await cerrado;
+  return Array.isArray(val) ? val : null;
 }
 
 async function cargarRanking(feria) {
