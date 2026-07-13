@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient.js';
-import { confirmDialog, mutar, toast, escapeHtml } from './ui.js';
+import { confirmDialog, mutar, toast, escapeHtml, abrirModal, campo } from './ui.js';
 
 export async function fetchInsumos() {
   const { data } = await supabase.from('insumos').select('*').order('nombre');
@@ -13,23 +13,35 @@ export async function renderInsumosSection(container) {
     <h2>Insumos</h2>
     <p class="card__hint">Empaques y materiales que se descuentan solos al vender, sin venderse ellos mismos (ej. bolsitas).</p>
     <div id="inv-insumos" class="inv-list"></div>
-    <form id="form-insumo" class="inv-form">
-      <input name="nombre" placeholder="Nombre (ej: Bolsita transparente)" required />
-      <input name="stock" type="number" min="0" placeholder="Stock inicial" required />
-      <input name="costo" type="number" min="0" step="1" placeholder="Costo $" value="0" />
-      <button type="submit">Agregar insumo</button>
+    <button type="button" class="btn-accion" data-toggle="form-insumo">
+      <svg class="icon" aria-hidden="true"><use href="#i-mas"/></svg> Agregar insumo
+    </button>
+    <form id="form-insumo" class="form-alta hidden">
+      ${campo({ label: 'Nombre', input: '<input name="nombre" class="input" placeholder="Ej: Bolsita transparente" required />' })}
+      ${campo({ label: 'Stock inicial', input: '<input name="stock" class="input" type="number" min="0" inputmode="numeric" placeholder="Ej: 100" required />' })}
+      ${campo({ label: 'Costo por unidad en pesos', hint: 'Cuánto te cuesta a vos cada uno (para saber tu ganancia más adelante).', input: '<input name="costo" class="input" type="number" min="0" step="1" inputmode="numeric" value="0" />' })}
+      <button type="submit" class="btn btn--primary">Guardar insumo</button>
     </form>
   `;
 
   const list = container.querySelector('#inv-insumos');
   list.innerHTML = insumos.map((i) => `
     <div class="row" data-id="${i.id}">
-      <span>${escapeHtml(i.nombre)}</span>
+      <span class="row__nombre">${escapeHtml(i.nombre)}</span>
       <label class="inv-mini-label">Stock <input type="number" class="insumo-stock-input" data-id="${i.id}" value="${i.stock}" min="0" /></label>
       <label class="inv-mini-label">Costo $<input type="number" class="insumo-costo-input" data-id="${i.id}" value="${i.costo ?? 0}" min="0" step="1" /></label>
-      <button class="btn-accion btn-accion--peligro" data-action="eliminar-insumo" data-id="${i.id}" title="Eliminar este insumo">🗑️ Eliminar</button>
+      <button class="btn-accion btn-accion--peligro btn-accion--sm" data-action="eliminar-insumo" data-id="${i.id}" title="Eliminar este insumo">
+        <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg> Eliminar
+      </button>
     </div>
   `).join('') || '<p class="list-empty">Todavía no hay insumos</p>';
+
+  const toggleBtn = container.querySelector('[data-toggle="form-insumo"]');
+  const form = container.querySelector('#form-insumo');
+  toggleBtn.addEventListener('click', () => {
+    form.classList.toggle('hidden');
+    if (!form.classList.contains('hidden')) form.querySelector('input').focus();
+  });
 
   list.querySelectorAll('.insumo-stock-input').forEach((input) => {
     input.addEventListener('change', async () => {
@@ -69,10 +81,10 @@ export async function renderInsumosSection(container) {
 
   container.querySelector('#form-insumo').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const form = e.target;
-    const submitBtn = form.querySelector('button[type="submit"]');
+    const f = e.target;
+    const submitBtn = f.querySelector('button[type="submit"]');
     submitBtn.disabled = true;
-    const { error } = await mutar(supabase.from('insumos').insert({ nombre: form.nombre.value.trim(), stock: Number(form.stock.value), costo: Number(form.costo.value || 0) }), 'No se pudo crear el insumo');
+    const { error } = await mutar(supabase.from('insumos').insert({ nombre: f.nombre.value.trim(), stock: Number(f.stock.value), costo: Number(f.costo.value || 0) }), 'No se pudo crear el insumo');
     if (error) { submitBtn.disabled = false; return; }
     renderInsumosSection(container);
   });
@@ -84,59 +96,58 @@ export async function abrirInsumosProducto(producto) {
   const insumos = await fetchInsumos();
   const { data: asignados } = await supabase.from('producto_insumos').select('*').eq('producto_id', producto.id);
 
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
+  const { dialogo, cerrar } = abrirModal({
+    titulo: `Insumos de "${producto.nombre}"`,
+    contenidoHTML: '<div id="insumos-modal-body"></div>',
+  });
+  const body = dialogo.querySelector('#insumos-modal-body');
 
   function render() {
-    overlay.innerHTML = `
-      <div class="modal">
-        <p>Insumos de "${escapeHtml(producto.nombre)}" — qué se descuenta del stock al vender una unidad</p>
-        <div id="insumos-list" class="inv-list">
-          ${asignados.map((r) => {
-            const insumo = insumos.find((i) => i.id === r.insumo_id);
-            return `
-              <div class="row">
-                <span>${insumo ? escapeHtml(insumo.nombre) : '(insumo eliminado)'} x ${r.cantidad}</span>
-                <button class="btn-accion btn-accion--peligro btn-accion--sm" data-action="quitar-insumo" data-id="${r.id}" title="Quitar este insumo del producto">🗑️ Quitar</button>
-              </div>
-            `;
-          }).join('') || '<p class="list-empty">Sin insumos asignados todavía</p>'}
-        </div>
-        <form id="form-agregar-insumo" class="inv-form">
-          <select name="insumo_id">
-            ${insumos.map((i) => `<option value="${i.id}">${escapeHtml(i.nombre)}</option>`).join('')}
-          </select>
-          <input name="cantidad" type="number" min="1" value="1" placeholder="Cantidad" required />
-          <button type="submit">Agregar insumo</button>
-        </form>
-        <div class="modal-actions">
-          <button class="btn btn--secondary" data-action="cerrar">Cerrar</button>
-        </div>
+    body.innerHTML = `
+      <p class="card__hint">Qué se descuenta del stock al vender una unidad.</p>
+      <div id="insumos-list" class="inv-list">
+        ${asignados.map((r) => {
+          const insumo = insumos.find((i) => i.id === r.insumo_id);
+          return `
+            <div class="row">
+              <span>${insumo ? escapeHtml(insumo.nombre) : '(insumo eliminado)'} x ${r.cantidad}</span>
+              <button class="btn-accion btn-accion--peligro btn-accion--sm" data-action="quitar-insumo" data-id="${r.id}" title="Quitar este insumo del producto">
+                <svg class="icon" aria-hidden="true"><use href="#i-quitar"/></svg> Quitar
+              </button>
+            </div>
+          `;
+        }).join('') || '<p class="list-empty">Sin insumos asignados todavía</p>'}
+      </div>
+      <form id="form-agregar-insumo" class="form-alta">
+        ${campo({ label: 'Insumo', input: `<select name="insumo_id" class="input">${insumos.map((i) => `<option value="${i.id}">${escapeHtml(i.nombre)}</option>`).join('')}</select>` })}
+        ${campo({ label: 'Cantidad por unidad vendida', input: '<input name="cantidad" class="input" type="number" min="1" value="1" inputmode="numeric" required />' })}
+        <button type="submit" class="btn btn--primary">Agregar insumo</button>
+      </form>
+      <div class="modal-actions">
+        <button type="button" class="btn btn--secondary" data-action="cerrar">Cerrar</button>
       </div>
     `;
   }
 
   render();
-  document.body.appendChild(overlay);
 
-  // Delegación en `overlay` (no en los elementos internos): el modal
+  // Delegación en el diálogo (no en los elementos internos): el modal
   // reconstruye su innerHTML en cada render(), así que un listener puesto
   // directamente en el <form> quedaría huérfano después del primer cambio.
-  overlay.addEventListener('click', async (e) => {
-    if (e.target.dataset.action === 'cerrar') {
-      document.body.removeChild(overlay);
-      return;
-    }
-    if (e.target.dataset.action === 'quitar-insumo') {
-      const { error } = await mutar(supabase.from('producto_insumos').delete().eq('id', e.target.dataset.id), 'No se pudo quitar el insumo');
+  dialogo.addEventListener('click', async (e) => {
+    const action = e.target.closest('[data-action]')?.dataset.action;
+    if (action === 'cerrar') { cerrar(null); return; }
+    if (action === 'quitar-insumo') {
+      const id = e.target.closest('[data-action]').dataset.id;
+      const { error } = await mutar(supabase.from('producto_insumos').delete().eq('id', id), 'No se pudo quitar el insumo');
       if (error) return;
-      const idx = asignados.findIndex((r) => r.id === e.target.dataset.id);
+      const idx = asignados.findIndex((r) => r.id === id);
       if (idx >= 0) asignados.splice(idx, 1);
       render();
     }
   });
 
-  overlay.addEventListener('submit', async (e) => {
+  dialogo.addEventListener('submit', async (e) => {
     if (e.target.id !== 'form-agregar-insumo') return;
     e.preventDefault();
     const form = e.target;
@@ -148,7 +159,7 @@ export async function abrirInsumosProducto(producto) {
       cantidad: Number(form.cantidad.value),
     }, { onConflict: 'producto_id,insumo_id' }).select().single();
     // Si el upsert falla, `nueva` es null: NO lo metemos al array o el próximo render() crashea con r.insumo_id sobre null.
-    if (error || !nueva) { submitBtn.disabled = false; toast('No se pudo agregar el insumo'); return; }
+    if (error || !nueva) { submitBtn.disabled = false; toast('No se pudo agregar el insumo', { tipo: 'error' }); return; }
     const idx = asignados.findIndex((r) => r.insumo_id === form.insumo_id.value);
     if (idx >= 0) asignados[idx] = nueva; else asignados.push(nueva);
     render();

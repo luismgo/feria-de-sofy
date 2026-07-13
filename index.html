@@ -36,12 +36,16 @@
   <section id="login-gate" class="screen">
     <div class="pin-card">
       <h1>🌸 Feria de Sofy</h1>
-      <p>Ingresá tu correo para entrar</p>
+      <p class="card__hint">Tu puesto de feria, en el celular</p>
       <form id="login-form">
-        <input id="login-email" type="email" placeholder="tu@correo.com" required autocomplete="email" />
-        <button type="submit" class="btn btn--primary btn--block">Enviar link</button>
+        <label class="field">
+          <span class="field__label">Tu correo</span>
+          <input id="login-email" class="input" type="email" placeholder="tu@correo.com" required autocomplete="email" />
+          <span class="field__hint">Te mandamos un enlace para entrar, sin contraseña.</span>
+        </label>
+        <button type="submit" class="btn btn--primary btn--block">Enviarme el enlace</button>
       </form>
-      <p id="login-message" class="hidden"></p>
+      <p id="login-message" class="login-msg hidden"></p>
     </div>
   </section>
 

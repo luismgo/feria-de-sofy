@@ -1,11 +1,15 @@
 import { supabase } from './supabaseClient.js';
-import { escapeHtml, formatMoney, promptDialog } from './ui.js';
+import { escapeHtml, formatMoney, promptDialog, campo, cargando } from './ui.js';
 
 export function initReportes(feria) {
   const container = document.getElementById('tab-reportes');
-  container.innerHTML = '<p>Cargando reportes...</p>';
+  container.innerHTML = cargando('Cargando reportes...');
   render(feria, container);
   return () => {};
+}
+
+function plural(n, uno, varios) {
+  return `${n} ${n === 1 ? uno : varios}`;
 }
 
 async function render(feria, container) {
@@ -72,33 +76,47 @@ function renderCierre(ventas, anuladasHoy, el) {
   ventasHoy.forEach((v) => { por[v.metodo_pago] = (por[v.metodo_pago] || 0) + Number(v.total); });
 
   el.innerHTML = `
-    <div class="cierre-linea"><span>💵 Esperado en efectivo</span><strong>${formatMoney(por.efectivo)}</strong></div>
-    <div class="cierre-linea"><span>Contado (lo que hay en la caja)</span><input type="number" id="cierre-contado" min="0" placeholder="$" /></div>
-    <div class="cierre-linea" id="cierre-diferencia-row"><span>Diferencia</span><strong id="cierre-diferencia">—</strong></div>
-    <hr class="cierre-hr" />
-    <div class="cierre-linea"><span>📲 Transferencias</span><strong>${formatMoney(por.transferencia)}</strong></div>
-    <div class="cierre-linea"><span>🔵 Otro (QR)</span><strong>${formatMoney(por.otro)}</strong></div>
-    <div class="cierre-linea"><span>Ventas del día</span><strong>${ventasHoy.length}</strong></div>
-    <div class="cierre-linea"><span>Anuladas hoy</span><strong>${anuladasHoy}</strong></div>
-    <button class="btn" id="btn-cerrar-caja">Cerrar caja 🎉</button>
+    <div class="cierre-hero">
+      <p class="stat__label">💵 Esperado en efectivo</p>
+      <p class="cierre-hero__monto monto">${formatMoney(por.efectivo)}</p>
+    </div>
+    ${campo({ label: 'Contado (lo que hay en la caja)', input: '<input type="number" id="cierre-contado" class="input" min="0" inputmode="numeric" placeholder="Ej: 50000" />' })}
+    <div class="cierre-diferencia" id="cierre-diferencia-row">
+      <span>Diferencia</span>
+      <strong id="cierre-diferencia" class="monto">—</strong>
+    </div>
+    <div class="stats-grid">
+      <div class="stat"><p class="stat__label">📲 Transferencias</p><p class="stat__valor monto">${formatMoney(por.transferencia)}</p></div>
+      <div class="stat"><p class="stat__label">🔵 Otro (QR)</p><p class="stat__valor monto">${formatMoney(por.otro)}</p></div>
+      <div class="stat"><p class="stat__label">Ventas del día</p><p class="stat__valor">${ventasHoy.length}</p></div>
+      <div class="stat"><p class="stat__label">Anuladas hoy</p><p class="stat__valor">${anuladasHoy}</p></div>
+    </div>
+    <button class="btn btn--primary btn--block" id="btn-cerrar-caja">Cerrar caja 🎉</button>
   `;
 
   const contado = el.querySelector('#cierre-contado');
   const difEl = el.querySelector('#cierre-diferencia');
+  const difRow = el.querySelector('#cierre-diferencia-row');
   contado.addEventListener('input', () => {
-    if (contado.value === '') { difEl.textContent = '—'; difEl.className = ''; return; }
+    if (contado.value === '') {
+      difEl.textContent = '—';
+      difEl.className = 'monto';
+      difRow.className = 'cierre-diferencia';
+      return;
+    }
     const dif = Number(contado.value) - por.efectivo;
     difEl.textContent = `${dif === 0 ? '✓ ' : ''}${formatMoney(dif)}`;
-    difEl.className = dif === 0 ? 'cierre-ok' : 'cierre-diff';
+    difEl.className = `monto ${dif === 0 ? 'cierre-ok' : 'cierre-diff'}`;
+    difRow.className = `cierre-diferencia ${dif === 0 ? 'cierre-diferencia--ok' : 'cierre-diferencia--mal'}`;
   });
 
   el.querySelector('#btn-cerrar-caja').addEventListener('click', () => {
     const dif = contado.value === '' ? null : Number(contado.value) - por.efectivo;
     if (window.confetti) window.confetti({ particleCount: 160, spread: 90, origin: { y: 0.6 } });
     if (dif === 0) {
-      import('./ui.js').then((m) => m.toast(`¡Cuadraste! 🎉 ${formatMoney(por.efectivo)} en efectivo`));
+      import('./ui.js').then((m) => m.toast(`¡Cuadraste! 🎉 ${formatMoney(por.efectivo)} en efectivo`, { tipo: 'exito' }));
     } else if (dif == null) {
-      import('./ui.js').then((m) => m.toast('Caja cerrada 🎉'));
+      import('./ui.js').then((m) => m.toast('Caja cerrada 🎉', { tipo: 'exito' }));
     } else {
       import('./ui.js').then((m) => m.toast(`Cerrada — diferencia de ${formatMoney(dif)} en efectivo`));
     }
@@ -129,11 +147,18 @@ function renderPorFecha(feria, containerRaiz, ventas, items, el) {
       const hora = new Date(v.created_at).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
       const desc = (itemsPorVenta[v.id] || []).map((i) => i.tipo === 'producto' ? `${escapeHtml(i.producto_nombre)} x${i.cantidad}` : escapeHtml(i.producto_nombre)).join(', ') || '—';
       const metodoIcon = v.metodo_pago === 'efectivo' ? '💵' : v.metodo_pago === 'transferencia' ? '📲' : '🔵';
-      const anularBtn = esHoy ? `<button class="btn-accion btn-accion--peligro btn-accion--sm" data-action="anular-venta" data-id="${v.id}" title="Repone stock e insumos y marca la venta como anulada">↩️ Anular</button>` : '';
-      return `<div class="venta-fila"><span>${hora} ${metodoIcon}</span><span class="venta-fila__desc">${desc}</span><span>${formatMoney(v.total)}</span>${anularBtn}</div>`;
+      const anularBtn = esHoy ? `
+        <button class="btn-accion btn-accion--peligro btn-accion--sm" data-action="anular-venta" data-id="${v.id}" title="Repone stock e insumos y marca la venta como anulada">
+          <svg class="icon" aria-hidden="true"><use href="#i-anular"/></svg> Anular
+        </button>` : '';
+      return `<div class="venta-fila"><span>${hora} ${metodoIcon}</span><span class="venta-fila__desc">${desc}</span><span class="monto">${formatMoney(v.total)}</span>${anularBtn}</div>`;
     }).join('');
     return `<details class="historial-dia" ${esHoy ? 'open' : ''}>
-      <summary>${esHoy ? '⭐ Hoy' : fecha} — ${formatMoney(totalDia)} (${ventasDia.length} ventas)</summary>
+      <summary>
+        <span class="historial-dia__titulo">${esHoy ? '⭐ Hoy' : fecha}</span>
+        <span class="historial-dia__meta">${plural(ventasDia.length, 'venta', 'ventas')}</span>
+        <strong class="monto historial-dia__total">${formatMoney(totalDia)}</strong>
+      </summary>
       <div class="dia-metodos">💵 ${formatMoney(porMetodo.efectivo)} · 📲 ${formatMoney(porMetodo.transferencia)} · 🔵 ${formatMoney(porMetodo.otro)}</div>
       ${filas}
     </details>`;
@@ -147,8 +172,8 @@ function renderPorFecha(feria, containerRaiz, ventas, items, el) {
       const motivo = (await promptDialog('Motivo de la anulación (opcional):', { okLabel: 'Anular venta', placeholder: 'Ej: se equivocó de producto' })) || null;
       const { error } = await supabase.rpc('anular_venta', { p_venta_id: btn.dataset.id, p_motivo: motivo });
       const { toast } = await import('./ui.js');
-      if (error) { toast(`No se pudo anular: ${error.message}`); return; }
-      toast('Venta anulada — stock repuesto');
+      if (error) { toast(`No se pudo anular: ${error.message}`, { tipo: 'error' }); return; }
+      toast('Venta anulada — stock repuesto', { tipo: 'exito' });
       render(feria, containerRaiz); // recargar todo el reporte
     });
   });
@@ -163,8 +188,15 @@ function renderTopProductos(items, comboItems, el) {
     conteo[ci.producto_nombre] = (conteo[ci.producto_nombre] || 0) + 1;
   });
   const ranking = Object.entries(conteo).sort((a, b) => b[1] - a[1]).slice(0, 10);
-  el.innerHTML = ranking.map(([nombre, cant]) => `<div class="row"><span>${escapeHtml(nombre)}</span><span>${cant} vendidos</span></div>`).join('')
-    || '<p class="list-empty">Todavía no hay ventas</p>';
+  const max = ranking.length ? ranking[0][1] : 1;
+  el.innerHTML = ranking.map(([nombre, cant], i) => `
+    <div class="rank-fila">
+      <span class="rank-fila__pos">${i + 1}</span>
+      <span class="rank-fila__nombre">${escapeHtml(nombre)}</span>
+      <span class="barra-rank" aria-hidden="true"><span class="barra-rank__fill" style="width:${Math.max(6, Math.round((cant / max) * 100))}%"></span></span>
+      <span class="rank-fila__cant monto">${cant}</span>
+    </div>
+  `).join('') || '<p class="list-empty">Todavía no hay ventas</p>';
 }
 
 function renderPorCategoria(items, el) {
@@ -173,6 +205,7 @@ function renderPorCategoria(items, el) {
     const clave = i.tipo === 'combo' ? 'Combos' : (i.categoria_precio_nombre || 'Sin categoría');
     porCategoria[clave] = (porCategoria[clave] || 0) + i.precio_unitario * i.cantidad;
   });
-  el.innerHTML = Object.entries(porCategoria).map(([nombre, total]) => `<div class="row"><span>${escapeHtml(nombre)}</span><span>${formatMoney(total)}</span></div>`).join('')
-    || '<p class="list-empty">Todavía no hay ventas</p>';
+  el.innerHTML = Object.entries(porCategoria).map(([nombre, total]) => `
+    <div class="row"><span>${escapeHtml(nombre)}</span><span class="monto">${formatMoney(total)}</span></div>
+  `).join('') || '<p class="list-empty">Todavía no hay ventas</p>';
 }

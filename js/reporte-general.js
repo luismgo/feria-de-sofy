@@ -1,11 +1,11 @@
 import { supabase } from './supabaseClient.js';
-import { escapeHtml, formatMoney } from './ui.js';
+import { escapeHtml, formatMoney, cargando } from './ui.js';
 
 export async function initReporteGeneral({ onVolver }) {
   const screen = document.getElementById('reporte-general');
   const content = document.getElementById('reporte-general-content');
   screen.classList.remove('hidden');
-  content.innerHTML = '<p>Cargando...</p>';
+  content.innerHTML = cargando('Cargando el reporte...');
 
   document.getElementById('btn-volver-selector').onclick = () => {
     screen.classList.add('hidden');
@@ -31,16 +31,18 @@ export async function initReporteGeneral({ onVolver }) {
   const cantidadGeneral = Object.values(porFeria).reduce((sum, r) => sum + r.cantidad, 0);
 
   content.innerHTML = `
-    <section class="card">
-      <h2>Total combinado</h2>
-      <p class="carrito-total">${formatMoney(totalGeneral)} — ${cantidadGeneral} ventas</p>
+    <section class="card cierre-hero">
+      <p class="stat__label">Total combinado de todas las ferias</p>
+      <p class="cierre-hero__monto monto">${formatMoney(totalGeneral)}</p>
+      <p class="card__hint">${cantidadGeneral} ${cantidadGeneral === 1 ? 'venta' : 'ventas'} en total</p>
     </section>
     <section class="card">
       <h2>Por feria</h2>
       ${Object.values(porFeria).map((r) => `
         <div class="row">
-          <span>${escapeHtml(r.feria.emoji)} ${escapeHtml(r.feria.nombre)}</span>
-          <span>${formatMoney(r.total)} (${r.cantidad} ventas)</span>
+          <span class="emoji-circulo" aria-hidden="true">${escapeHtml(r.feria.emoji)}</span>
+          <span class="row__main">${escapeHtml(r.feria.nombre)} <span class="row__meta">${r.cantidad} ${r.cantidad === 1 ? 'venta' : 'ventas'}</span></span>
+          <span class="monto row__monto">${formatMoney(r.total)}</span>
         </div>
       `).join('') || '<p class="list-empty">Todavía no hay ferias</p>'}
     </section>
