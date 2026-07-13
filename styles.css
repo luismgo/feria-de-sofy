@@ -39,14 +39,14 @@ body {
 
 .btn--secondary {
   background: white;
-  color: var(--accent);
+  color: var(--accent-strong); /* ~5:1 sobre blanco (AA) — antes --accent daba ~3.2:1 */
   border: 2px solid var(--accent);
 }
 
 .btn-link {
   background: none;
   box-shadow: none;
-  color: var(--accent);
+  color: var(--accent-strong); /* ~5:1 sobre blanco/fondo claro (AA) */
   text-decoration: underline;
   padding: 4px;
 }
@@ -77,7 +77,7 @@ body {
 .feria-cards { display: flex; flex-direction: column; gap: 12px; margin: 20px 0; }
 .feria-card {
   display: flex; align-items: center; gap: 12px;
-  background: white; padding: 20px; text-align: left;
+  background: white; color: var(--text); padding: 20px; text-align: left;
   font-size: 1.2rem;
 }
 .feria-card__emoji { font-size: 2rem; }
@@ -98,13 +98,13 @@ body {
 .inv-form input, .inv-form select { flex: 1; min-width: 100px; padding: 8px; border-radius: 8px; border: 1px solid #DDE3F5; font-family: inherit; }
 .inv-mini-label { display: inline-flex; align-items: center; gap: 4px; font-size: 0.75rem; opacity: 0.8; }
 .inv-mini-label input { width: 64px; }
-.btn-icon { background: none; box-shadow: none; padding: 4px 8px; font-size: 1.1rem; }
+.btn-icon { background: none; color: var(--text); box-shadow: none; padding: 4px 8px; font-size: 1.1rem; }
 
 .combos-row { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 12px; }
 .combo-btn { white-space: nowrap; }
 .vender-buscador { width: 100%; padding: 10px 14px; border-radius: var(--radius); border: 1px solid #DDE3F5; font-family: inherit; font-size: 1rem; margin-bottom: 12px; }
 .productos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; margin-bottom: 100px; }
-.producto-card { background: white; border-radius: var(--radius); padding: 10px; display: flex; flex-direction: column; align-items: center; gap: 4px; box-shadow: var(--shadow); }
+.producto-card { background: white; color: var(--text); border-radius: var(--radius); padding: 10px; display: flex; flex-direction: column; align-items: center; gap: 4px; box-shadow: var(--shadow); }
 .producto-card:disabled { opacity: 0.4; }
 .producto-card img { width: 100%; height: 80px; object-fit: cover; border-radius: 8px; }
 .producto-card__sin-foto { font-size: 2rem; }
@@ -144,7 +144,7 @@ body {
 @media (min-width: 700px) {
   .screen { max-width: 700px; margin: 0 auto; }
   .productos-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
-  .carrito-panel { max-width: 700px; left: 50%; transform: translateX(-50%); border-radius: var(--radius); margin-bottom: 16px; position: sticky; bottom: 16px; }
+  .carrito-panel { position: sticky; bottom: 16px; left: auto; right: auto; transform: none; border-radius: var(--radius); margin-bottom: 16px; }
 }
 
 h1, h2 { color: var(--text); }
