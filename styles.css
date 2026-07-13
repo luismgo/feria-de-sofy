@@ -113,18 +113,14 @@ h3 { font-size: 1.1rem; margin: 0; }
 
 /* ============ Botones ============ */
 
-/* Fallback para botones sin clase (formularios de alta aún no migrados).
-   Muere en la Fase 4, cuando todos los templates declaren su variante. */
+/* Reset base: todo botón declara su variante (.btn, .btn-accion, etc.) */
 button {
   font-family: inherit;
-  font-size: var(--fs-subhead);
-  font-weight: 600;
+  font-size: inherit;
+  color: inherit;
+  background: none;
   border: none;
-  border-radius: var(--r-md);
-  padding: 12px 18px;
-  min-height: 44px;
-  background: var(--accent-strong);
-  color: #fff;
+  padding: 0;
   cursor: pointer;
 }
 
@@ -153,12 +149,6 @@ button {
 .btn--danger, .btn--peligro { background: var(--danger); color: #fff; }
 .btn--quiet { background: none; box-shadow: none; color: var(--accent-strong); }
 .btn--block { width: 100%; }
-.btn-link {
-  background: none; box-shadow: none;
-  color: var(--accent-strong);
-  text-decoration: underline;
-  padding: 4px; min-height: 0;
-}
 
 button:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
@@ -191,11 +181,9 @@ button:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }
   margin: 6px 0 0;
 }
 
-.input, .prompt-input,
-.inv-form input, .inv-form select,
+.input,
 .inv-mini-label input, .inv-mini-label select,
-.inv-producto__controls select,
-.pin-card input, #reporte-cierre input {
+.inv-producto__controls select {
   font-family: inherit;
   font-size: max(1rem, 16px); /* <16px dispara el auto-zoom de Safari iOS */
   color: var(--ink);
@@ -206,9 +194,8 @@ button:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }
   min-height: 44px;
 }
 .input { width: 100%; min-height: 48px; padding: 12px 14px; }
-.input:focus, .prompt-input:focus,
-.inv-form input:focus, .inv-form select:focus,
-.inv-mini-label input:focus, #reporte-cierre input:focus {
+.input:focus,
+.inv-mini-label input:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
@@ -522,6 +509,7 @@ button:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }
   overflow-y: auto;
   box-shadow: var(--shadow-3);
 }
+.modal--combo { width: min(480px, 100%); }
 .modal__title {
   font-family: var(--font-display);
   font-size: 1.1rem; font-weight: 700;
@@ -678,7 +666,8 @@ button:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }
   background: var(--surface); color: var(--accent-strong);
   border: 1.5px solid var(--accent);
   border-radius: var(--r-full);
-  box-shadow: none;
+  padding: 10px 16px;
+  min-height: 44px;
   font-weight: 700; font-size: var(--fs-footnote);
 }
 
@@ -735,9 +724,6 @@ button:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .carrito-linea__detalle { font-size: var(--fs-caption); color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .carrito-linea__total { font-weight: 700; min-width: 64px; text-align: right; }
 
-/* Sigue en uso por reporte-general hasta la Fase 3 */
-.carrito-total { font-weight: 700; font-size: var(--fs-title2); font-variant-numeric: tabular-nums; }
-
 .carrito-descuento { margin: var(--sp-3) 0 var(--sp-2); }
 .carrito-descuento .input { width: 170px; }
 
@@ -775,8 +761,6 @@ button:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 /* ============ Inventario ============ */
 
 .inv-list { display: flex; flex-direction: column; }
-.inv-form { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-3); }
-.inv-form input, .inv-form select { flex: 1; min-width: 110px; }
 .inv-mini-label {
   display: inline-flex; align-items: center; gap: 6px;
   font-size: var(--fs-caption); font-weight: 600; color: var(--ink-2);
