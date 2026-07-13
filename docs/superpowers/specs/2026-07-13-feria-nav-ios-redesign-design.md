@@ -41,8 +41,9 @@ dibuja* el carrito, nunca la llamada al RPC ni su contrato de 5 argumentos.
 - **C1** — reemplazar el borde `#DDE3F5` (azul-lila, fuera de paleta) por el
   token cálido `--border: #D9A97E`, promovido a custom property en `:root`.
 - **C2** — desduplicar el markup img+nombre de la tarjeta de producto.
-- **C3** — separador de miles en los 2 call sites que faltan
-  (`inventario.js:163,182`) vía el `formatMoney()` existente.
+- **C3** — separador de miles: corregir el locale de `formatMoney` a
+  **`es-CO`** (hoy `es-MX`, incorrecto para la app) y cubrir los 2 call sites
+  que aún interpolan el monto crudo (`inventario.js:163,182`).
 
 **No incluye (fuera de alcance, otra sesión):**
 - **D — v3**: `escapeHtml` en interpolaciones de `producto_nombre` (XSS),
@@ -183,8 +184,9 @@ tocar SQL, `js/app.js` (firmas intactas), ni el contrato con el RPC.
   `$${c.precio}` a `${formatMoney(c.precio)}` (quitando el `$` literal, que
   `formatMoney` ya incluye). Resto del archivo ya usa `formatMoney`.
 - **`js/ui.js`**: `formatMoney` ya existe (`'$' + Number(n||0).
-  toLocaleString('es-MX')`). Decisión pendiente menor de locale (ver Preguntas
-  abiertas). Sin cambios de firma.
+  toLocaleString('es-MX')`) pero con locale **incorrecto**: la app es es-CO.
+  Corregir a `'es-CO'` (separador de miles con **punto**: `$1.234`). Cambio
+  de una línea, app-wide y consistente. Sin cambios de firma.
 
 ## Escala de z-index (explícita)
 
@@ -268,12 +270,12 @@ tab bar). Checklist:
 - Sin doble scroll; sin salto de layout al aparecer/desaparecer el banner.
 - Montos con separador de miles en Inventario (categorías y combos).
 
-## Decisiones tomadas (defaults, el usuario puede revertir)
+## Decisiones tomadas
 
-- **Locale de `formatMoney`**: se **mantiene `'es-MX'`** (ya agrega miles con
-  coma: `$1,234`). El ítem C3 es solo "que haya separador", y `es-MX` ya lo
-  da; cambiar a `'es-AR'` (`$1.234`) es un cambio app-wide fuera del alcance
-  de C3. Revertir es un one-liner en `ui.js` si se prefiere formato argentino.
+- **Locale de la app: `es-CO` (Colombia)**. Toda la plataforma es es-CO. El
+  `formatMoney` de `js/ui.js` hoy usa `'es-MX'` (incorrecto → miles con coma
+  `$1,234`); se corrige a **`'es-CO'`** (miles con punto `$1.234`). Es un
+  cambio de una línea, app-wide y consistente, y forma parte de C3.
 - **`#connection-banner`**: se **ancla dentro de la zona fija superior**
   (junto a la nav bar) para que su aparición/desaparición no empuje el layout
   ni cause saltos con la barra superior fija.
