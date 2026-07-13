@@ -52,6 +52,7 @@ async function render(feria, container) {
     </section>
     <section class="inv-section">
       <h2>Por categoría de precio</h2>
+      <p class="inv-hint">Suma de ventas por categoría, antes de descuentos. Para el dinero real de la caja mirá "Cerrar caja".</p>
       <div id="reporte-categorias"></div>
     </section>
   `;
