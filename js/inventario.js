@@ -160,7 +160,7 @@ function renderCategorias(feria, categorias, container) {
   const list = container.querySelector('#inv-categorias');
   list.innerHTML = categorias.map((c) => `
     <div class="inv-row" data-id="${c.id}">
-      <span>${c.nombre} — $${c.precio}</span>
+      <span>${escapeHtml(c.nombre)} — ${formatMoney(c.precio)}</span>
       <button class="btn-accion btn-accion--peligro" data-action="eliminar-categoria" data-id="${c.id}" title="Eliminar esta categoría de precio">🗑️ Eliminar</button>
     </div>
   `).join('') || '<p class="inv-empty">Todavía no hay categorías de precio</p>';
@@ -179,7 +179,7 @@ function renderCombos(feria, combos, container) {
   const list = container.querySelector('#inv-combos');
   list.innerHTML = combos.map((c) => `
     <div class="inv-row" data-id="${c.id}">
-      <span>${c.nombre} — ${c.cantidad} productos por $${c.precio}${c.activo ? '' : ' (en pausa)'}</span>
+      <span>${escapeHtml(c.nombre)} — ${c.cantidad} productos por ${formatMoney(c.precio)}${c.activo ? '' : ' (en pausa)'}</span>
       <div class="inv-row__acciones">
         <button class="btn-accion" data-action="toggle-combo" data-id="${c.id}" data-activo="${c.activo}" title="${c.activo ? 'Deja de aparecer al vender' : 'Vuelve a aparecer al vender'}">${c.activo ? '⏸️ Pausar' : '▶️ Activar'}</button>
         <button class="btn-accion btn-accion--peligro" data-action="eliminar-combo" data-id="${c.id}" title="Eliminar este combo">🗑️ Eliminar</button>

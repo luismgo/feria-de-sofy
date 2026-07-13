@@ -52,9 +52,10 @@ export function escapeHtml(value) {
   ));
 }
 
-// Formatea un monto en pesos con separador de miles (ej. 1234 -> "$1,234").
+// Formatea un monto en pesos con separador de miles (ej. 1234 -> "$1.234").
+// Locale es-CO: separador de miles con PUNTO, como se lee la plata en Colombia.
 export function formatMoney(n) {
-  return '$' + Number(n || 0).toLocaleString('es-MX');
+  return '$' + Number(n || 0).toLocaleString('es-CO');
 }
 
 // UUID con fallback: crypto.randomUUID sólo existe en contexto seguro (https/localhost);

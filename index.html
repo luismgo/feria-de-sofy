@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
   <title>Feria de Sofy</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
@@ -33,30 +33,54 @@
   </section>
 
   <section id="reporte-general" class="screen hidden">
-    <header class="feria-header">
-      <button id="btn-volver-selector" class="btn-link">&larr; Volver</button>
-      <h1>📊 Reporte general</h1>
+    <header class="navbar">
+      <button class="navbar__back" id="btn-volver-selector" aria-label="Volver a la lista de ferias">
+        <span aria-hidden="true">‹</span> Ferias
+      </button>
+      <h1 class="navbar__title">📊 Reporte general</h1>
+      <span class="navbar__trailing" aria-hidden="true"></span>
     </header>
-    <main id="reporte-general-content"></main>
+    <div class="feria-scroll" id="reporte-general-content"></div>
   </section>
 
-  <section id="feria-view" class="screen hidden">
-    <header class="feria-header">
-      <button id="btn-cambiar-feria" class="btn-link">&larr; Cambiar feria</button>
-      <h1 id="feria-titulo"></h1>
+  <section id="feria-view" class="screen hidden" data-tab="vender">
+    <header class="navbar">
+      <button class="navbar__back" id="btn-cambiar-feria" aria-label="Volver a la lista de ferias">
+        <span aria-hidden="true">‹</span> Ferias
+      </button>
+      <h1 class="navbar__title" id="feria-titulo"></h1>
+      <span class="navbar__trailing" aria-hidden="true"></span>
     </header>
 
-    <nav class="tabs">
-      <button class="tab-btn active" data-tab="vender">🛒 Vender</button>
-      <button class="tab-btn" data-tab="inventario">📦 Inventario</button>
-      <button class="tab-btn" data-tab="ideas">💡 Ideas</button>
-      <button class="tab-btn" data-tab="reportes">📊 Reportes</button>
-    </nav>
+    <div class="feria-scroll">
+      <main id="tab-vender" class="tab-panel"></main>
+      <main id="tab-inventario" class="tab-panel hidden"></main>
+      <main id="tab-ideas" class="tab-panel hidden"></main>
+      <main id="tab-reportes" class="tab-panel hidden"></main>
+    </div>
 
-    <main id="tab-vender" class="tab-panel"></main>
-    <main id="tab-inventario" class="tab-panel hidden"></main>
-    <main id="tab-ideas" class="tab-panel hidden"></main>
-    <main id="tab-reportes" class="tab-panel hidden"></main>
+    <button id="carrito-dock" class="carrito-dock" type="button" aria-haspopup="dialog" aria-label="Abrir carrito para cobrar"></button>
+    <div id="carrito-backdrop" class="carrito-backdrop hidden"></div>
+    <aside id="carrito-sheet" class="carrito-sheet" role="dialog" aria-modal="true" aria-label="Carrito de venta" tabindex="-1"></aside>
+
+    <nav class="tabbar" aria-label="Secciones de la feria">
+      <button class="tabbar__item is-active" data-tab="vender" aria-current="page">
+        <span class="tabbar__icon" aria-hidden="true">🛒</span>
+        <span class="tabbar__label">Vender</span>
+      </button>
+      <button class="tabbar__item" data-tab="inventario">
+        <span class="tabbar__icon" aria-hidden="true">📦</span>
+        <span class="tabbar__label">Inventario</span>
+      </button>
+      <button class="tabbar__item" data-tab="ideas">
+        <span class="tabbar__icon" aria-hidden="true">💡</span>
+        <span class="tabbar__label">Ideas</span>
+      </button>
+      <button class="tabbar__item" data-tab="reportes">
+        <span class="tabbar__icon" aria-hidden="true">📊</span>
+        <span class="tabbar__label">Reportes</span>
+      </button>
+    </nav>
   </section>
 
   <script type="module" src="js/app.js"></script>

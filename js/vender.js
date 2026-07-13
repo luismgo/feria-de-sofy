@@ -11,6 +11,7 @@ let filtroBusqueda = '';
 let rankingCongelado = []; // ids de producto ordenados por más vendidos, calculado 1 vez por sesión de feria
 let feriaProductosActuales = [];
 let combosActuales = [];
+let sheetAbierta = false;
 
 export function initVender(feria) {
   carrito = [];
@@ -21,6 +22,7 @@ export function initVender(feria) {
   rankingCongelado = [];
   feriaProductosActuales = [];
   combosActuales = [];
+  resetCarritoUI();
   const container = document.getElementById('tab-vender');
   container.innerHTML = '<p>Cargando productos...</p>';
 
@@ -29,11 +31,14 @@ export function initVender(feria) {
   // "más vendidos arriba" se aplique aunque el usuario no interactúe.
   cargarRanking(feria).then(() => loadAndRender(feria, container));
 
+  // Los eventos realtime (otro dispositivo, cambios de stock) sólo re-dibujan la grilla:
+  // NO tocan la hoja del carrito, para no destruir el input de descuento mientras Sofy
+  // lo tipea (fix de foco B). El carrito es estado de cliente y no cambia por stock ajeno.
   realtimeChannel = supabase
     .channel(`vender-${feria.id}`)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'productos' }, () => loadAndRender(feria, container))
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'feria_productos' }, () => loadAndRender(feria, container))
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'categorias_precio' }, () => loadAndRender(feria, container))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'productos' }, () => loadAndRender(feria, container, { refrescarCarrito: false }))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'feria_productos' }, () => loadAndRender(feria, container, { refrescarCarrito: false }))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'categorias_precio' }, () => loadAndRender(feria, container, { refrescarCarrito: false }))
     .subscribe();
 
   return () => {
@@ -41,10 +46,11 @@ export function initVender(feria) {
       supabase.removeChannel(realtimeChannel);
       realtimeChannel = null;
     }
+    cerrarSheet();
   };
 }
 
-async function loadAndRender(feria, container) {
+async function loadAndRender(feria, container, { refrescarCarrito = true } = {}) {
   const [{ data: feriaProductos, error: prodError }, { data: combos, error: comboError }] = await Promise.all([
     supabase.from('feria_productos').select('id, categoria_precio_id, precio_override, productos(id, nombre, imagen_url, stock), categorias_precio(precio)').eq('feria_id', feria.id),
     supabase.from('combos').select('*').eq('feria_id', feria.id).eq('activo', true).order('nombre'),
@@ -57,7 +63,8 @@ async function loadAndRender(feria, container) {
 
   feriaProductosActuales = feriaProductos || [];
   combosActuales = combos || [];
-  render(feria, feriaProductosActuales, combosActuales, container);
+  renderGrid(feria, feriaProductosActuales, combosActuales, container);
+  if (refrescarCarrito) renderCarrito(feria, container);
 }
 
 function precioEfectivo(fp) {
@@ -83,7 +90,15 @@ function aplicarFiltroBusqueda(grid) {
   });
 }
 
-function render(feria, feriaProductos, combos, container) {
+// Dibuja buscador + combos + grilla de productos en el panel de Vender (no el carrito).
+function renderGrid(feria, feriaProductos, combos, container) {
+  // Fix de foco (B): si un evento realtime entra mientras Sofy tipea en el buscador,
+  // preservamos foco y posición del cursor tras reconstruir la grilla.
+  const activo = document.activeElement;
+  const preservarBuscador = !!(activo && activo.classList && activo.classList.contains('vender-buscador'));
+  const selStart = preservarBuscador ? activo.selectionStart : null;
+  const selEnd = preservarBuscador ? activo.selectionEnd : null;
+
   container.innerHTML = '';
 
   const buscador = document.createElement('input');
@@ -128,19 +143,22 @@ function render(feria, feriaProductos, combos, container) {
     const card = document.createElement('button');
     card.className = 'producto-card';
     card.dataset.nombre = p.nombre.toLowerCase();
+
+    // (C2) markup común de foto+nombre, una sola vez: cada rama añade sólo su parte variable.
+    const media = p.imagen_url
+      ? `<img src="${p.imagen_url}" alt="${escapeHtml(p.nombre)}" />`
+      : '<div class="producto-card__sin-foto">🌸</div>';
+    const nombre = `<span class="producto-card__nombre">${escapeHtml(p.nombre)}</span>`;
+
     if (precio == null) {
       card.classList.add('producto-card--sin-precio');
-      card.innerHTML = `
-        ${p.imagen_url ? `<img src="${p.imagen_url}" alt="${escapeHtml(p.nombre)}" />` : '<div class="producto-card__sin-foto">🌸</div>'}
-        <span class="producto-card__nombre">${escapeHtml(p.nombre)}</span>
-        <span class="producto-card__poner-precio">Tocar para poner precio</span>
-      `;
+      card.innerHTML = `${media}${nombre}<span class="producto-card__poner-precio">Tocar para poner precio</span>`;
       card.addEventListener('click', async () => {
         const val = await promptDialog(`Precio de "${p.nombre}" en esta feria:`, { placeholder: 'Ej: 100', tipo: 'number', okLabel: 'Poner precio' });
         if (val === null) return; // el usuario canceló
-        const precio = Number(val);
-        if (!Number.isFinite(precio) || precio <= 0) { toast('Poné un precio válido mayor a 0.'); return; }
-        const { error } = await supabase.from('feria_productos').update({ precio_override: precio }).eq('id', fp.id);
+        const precioNuevo = Number(val);
+        if (!Number.isFinite(precioNuevo) || precioNuevo <= 0) { toast('Poné un precio válido mayor a 0.'); return; }
+        const { error } = await supabase.from('feria_productos').update({ precio_override: precioNuevo }).eq('id', fp.id);
         if (error) { toast('No se pudo guardar el precio. Probá de nuevo.'); return; }
         loadAndRender(feria, container);
       });
@@ -148,19 +166,19 @@ function render(feria, feriaProductos, combos, container) {
       return; // continúa el forEach
     }
     card.disabled = disponible <= 0;
-    card.innerHTML = `
-      ${p.imagen_url ? `<img src="${p.imagen_url}" alt="${escapeHtml(p.nombre)}" />` : '<div class="producto-card__sin-foto">🌸</div>'}
-      <span class="producto-card__nombre">${escapeHtml(p.nombre)}</span>
+    card.innerHTML = `${media}${nombre}
       <span class="producto-card__precio">${formatMoney(precio)}</span>
-      <span class="producto-card__stock">${disponible > 0 ? `Disponible: ${disponible}` : 'Sin stock'}</span>
-    `;
+      <span class="producto-card__stock">${disponible > 0 ? `Disponible: ${disponible}` : 'Sin stock'}</span>`;
     card.addEventListener('click', () => agregarProductoAlCarrito(p, precio, feria, container));
     grid.appendChild(card);
   });
   container.appendChild(grid);
   aplicarFiltroBusqueda(grid); // conserva el filtro activo tras un re-render (ej. agregar al carrito)
 
-  container.appendChild(renderCarrito(feria, container));
+  if (preservarBuscador) {
+    const nb = container.querySelector('.vender-buscador');
+    if (nb) { nb.focus(); try { nb.setSelectionRange(selStart, selEnd); } catch { /* type=search sin selección: ignorar */ } }
+  }
 }
 
 function agregarProductoAlCarrito(producto, precio, feria, container) {
@@ -172,25 +190,77 @@ function agregarProductoAlCarrito(producto, precio, feria, container) {
   const linea = carrito.find((l) => l.tipo === 'producto' && l.productoId === producto.id);
   if (linea) linea.cantidad += 1;
   else carrito.push({ tipo: 'producto', productoId: producto.id, nombre: producto.nombre, precio, cantidad: 1 });
-  refrescarCarrito(feria, container);
+  refrescarVenta(feria, container);
 }
 
-function refrescarCarrito(feria, container) {
+// Re-dibuja grilla (recalcula "Disponible" en cliente) y carrito (dock + hoja) tras un cambio del carrito.
+function refrescarVenta(feria, container) {
   clientVentaIdPendiente = null; // el carrito cambió => nueva venta lógica
-  render(feria, feriaProductosActuales, combosActuales, container); // recalcula "Disponible" en cliente, sin round-trip
+  renderGrid(feria, feriaProductosActuales, combosActuales, container);
+  renderCarrito(feria, container);
 }
+
+function resetCarritoUI() {
+  cerrarSheet();
+  const dock = document.getElementById('carrito-dock');
+  const sheet = document.getElementById('carrito-sheet');
+  if (dock) { dock.classList.remove('has-items'); dock.innerHTML = ''; }
+  if (sheet) sheet.innerHTML = '';
+}
+
+function abrirSheet() {
+  const sheet = document.getElementById('carrito-sheet');
+  const backdrop = document.getElementById('carrito-backdrop');
+  if (!sheet || carrito.length === 0) return;
+  sheet.classList.add('is-open');
+  if (backdrop) backdrop.classList.remove('hidden');
+  sheetAbierta = true;
+  document.addEventListener('keydown', onSheetKeydown);
+  sheet.focus(); // foco al diálogo (tabindex=-1); Escape cierra, el foco vuelve al dock
+}
+
+export function cerrarSheet() {
+  const sheet = document.getElementById('carrito-sheet');
+  const backdrop = document.getElementById('carrito-backdrop');
+  if (sheet) sheet.classList.remove('is-open');
+  if (backdrop) backdrop.classList.add('hidden');
+  if (sheetAbierta) {
+    document.removeEventListener('keydown', onSheetKeydown);
+    const dock = document.getElementById('carrito-dock');
+    if (dock && dock.classList.contains('has-items')) dock.focus();
+  }
+  sheetAbierta = false;
+}
+
+function onSheetKeydown(e) { if (e.key === 'Escape') cerrarSheet(); }
 
 function renderCarrito(feria, container) {
-  const panel = document.createElement('div');
-  panel.id = 'carrito-panel';
-  panel.className = 'carrito-panel';
+  const dock = document.getElementById('carrito-dock');
+  const sheet = document.getElementById('carrito-sheet');
+  const backdrop = document.getElementById('carrito-backdrop');
+  if (!dock || !sheet) return;
 
   const bruto = carrito.reduce((sum, l) => sum + l.precio * (l.tipo === 'producto' ? l.cantidad : 1), 0);
   descuentoActual = Math.min(descuentoActual, bruto); // re-clamp: si el carrito se achicó, el descuento no puede superar el nuevo bruto
   const total = Math.max(0, bruto - descuentoActual);
+  const count = carrito.reduce((sum, l) => sum + (l.tipo === 'producto' ? l.cantidad : 1), 0);
 
-  panel.innerHTML = `
-    <h3>🛒 Carrito</h3>
+  // --- Mini-dock: resumen compacto encima de la tab bar (se muestra sólo en Vender con ítems) ---
+  dock.classList.toggle('has-items', carrito.length > 0);
+  dock.innerHTML = `
+    <span class="carrito-dock__resumen">🛒 ${count} · ${formatMoney(total)}</span>
+    <span class="carrito-dock__cta">Cobrar ›</span>
+  `;
+  dock.onclick = () => abrirSheet();
+  if (backdrop) backdrop.onclick = () => cerrarSheet();
+
+  // --- Hoja: carrito completo (líneas, descuento, método, Vaciar/Confirmar) ---
+  sheet.innerHTML = `
+    <div class="carrito-sheet__handle" aria-hidden="true"></div>
+    <div class="carrito-sheet__head">
+      <h3>🛒 Carrito</h3>
+      <button type="button" class="btn-accion btn-accion--sm" id="btn-cerrar-sheet" aria-label="Cerrar carrito">✕ Cerrar</button>
+    </div>
     <div class="carrito-lineas">
       ${carrito.map((l, i) => `
         <div class="carrito-linea" data-index="${i}">
@@ -205,9 +275,9 @@ function renderCarrito(feria, container) {
     <p class="carrito-total">Total: ${formatMoney(total)}${descuentoActual ? ` <s>${formatMoney(bruto)}</s>` : ''}</p>
     <div class="carrito-pago">
       <span>Pago:</span>
-      ${['efectivo', 'transferencia', 'otro'].map((m) => `
+      ${['efectivo', 'transferencia'].map((m) => `
         <button type="button" class="pago-btn ${metodoPagoActual === m ? 'active' : ''}" data-metodo="${m}">
-          ${m === 'efectivo' ? '💵 Efectivo' : m === 'transferencia' ? '📲 Transfer' : '🔵 Otro'}
+          ${m === 'efectivo' ? '💵 Efectivo' : '📲 Transferencia'}
         </button>
       `).join('')}
     </div>
@@ -217,46 +287,48 @@ function renderCarrito(feria, container) {
     </div>
   `;
 
-  panel.querySelectorAll('[data-action="quitar-linea"]').forEach((btn) => {
+  sheet.querySelector('#btn-cerrar-sheet').addEventListener('click', () => cerrarSheet());
+
+  sheet.querySelectorAll('[data-action="quitar-linea"]').forEach((btn) => {
     btn.addEventListener('click', () => {
       carrito.splice(Number(btn.dataset.index), 1);
-      refrescarCarrito(feria, container);
+      if (carrito.length === 0) cerrarSheet();
+      refrescarVenta(feria, container);
     });
   });
 
-  panel.querySelector('#btn-vaciar-carrito').addEventListener('click', async () => {
+  sheet.querySelector('#btn-vaciar-carrito').addEventListener('click', async () => {
     if (carrito.length === 0) return;
     const ok = await confirmDialog('¿Vaciar el carrito? Se quitan todos los productos que agregaste.');
     if (!ok) return;
     carrito = [];
-    refrescarCarrito(feria, container);
+    cerrarSheet();
+    refrescarVenta(feria, container);
   });
 
-  panel.querySelectorAll('.pago-btn').forEach((btn) => {
+  sheet.querySelectorAll('.pago-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       metodoPagoActual = btn.dataset.metodo;
-      panel.querySelectorAll('.pago-btn').forEach((b) => b.classList.toggle('active', b.dataset.metodo === metodoPagoActual));
+      sheet.querySelectorAll('.pago-btn').forEach((b) => b.classList.toggle('active', b.dataset.metodo === metodoPagoActual));
     });
   });
 
-  const inputDescuento = panel.querySelector('#input-descuento');
+  const inputDescuento = sheet.querySelector('#input-descuento');
   if (inputDescuento) {
     inputDescuento.addEventListener('change', () => {
       const val = Math.max(0, Number(inputDescuento.value) || 0);
       descuentoActual = Math.min(val, bruto);
-      const viejo = container.querySelector('#carrito-panel');
-      const nuevo = renderCarrito(feria, container);
-      if (viejo) viejo.replaceWith(nuevo);
+      renderCarrito(feria, container); // change dispara en blur: re-render seguro, no roba foco
     });
   }
 
-  panel.querySelector('#btn-confirmar-venta').addEventListener('click', async () => {
+  sheet.querySelector('#btn-confirmar-venta').addEventListener('click', async () => {
     if (!isOnline()) {
       toast('Sin conexión — no se puede confirmar la venta ahora');
       return;
     }
 
-    const btn = panel.querySelector('#btn-confirmar-venta');
+    const btn = sheet.querySelector('#btn-confirmar-venta');
     btn.disabled = true;
     btn.textContent = 'Confirmando...';
 
@@ -309,12 +381,11 @@ function renderCarrito(feria, container) {
     clientVentaIdPendiente = null;
     metodoPagoActual = 'efectivo';
     descuentoActual = 0;
+    cerrarSheet();
     if (window.confetti) window.confetti({ particleCount: 120, spread: 80, origin: { y: 0.7 } });
     toast(`¡Venta registrada! 🎉 Total: ${formatMoney(data[0].total)}`);
     loadAndRender(feria, container);
   });
-
-  return panel;
 }
 
 async function agregarComboAlCarrito(combo, feriaProductos, feria, container) {
@@ -331,7 +402,7 @@ async function agregarComboAlCarrito(combo, feriaProductos, feria, container) {
   if (!seleccionados) return;
 
   carrito.push({ tipo: 'combo', comboId: combo.id, nombre: combo.nombre, precio: combo.precio, productos: seleccionados });
-  refrescarCarrito(feria, container);
+  refrescarVenta(feria, container);
 }
 
 function seleccionarProductosCombo(combo, disponibles) {

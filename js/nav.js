@@ -1,4 +1,4 @@
-import { initVender } from './vender.js';
+import { initVender, cerrarSheet } from './vender.js';
 import { initInventario } from './inventario.js';
 import { initIdeas } from './ideas.js';
 import { initReportes } from './reportes.js';
@@ -9,6 +9,7 @@ const INIT_FNS = { vender: initVender, inventario: initInventario, ideas: initId
 let currentFeria = null;
 let currentCleanups = {};
 let tabButtonsBound = false;
+let tecladoBound = false;
 
 function clearTab(tab) {
   if (currentCleanups[tab]) {
@@ -19,12 +20,23 @@ function clearTab(tab) {
 }
 
 function showTab(tab) {
+  const view = document.getElementById('feria-view');
+  view.dataset.tab = tab; // dispara el padding-bottom correcto del scroll (reserva dock sólo en Vender)
+
   TABS.forEach((t) => {
     document.getElementById(`tab-${t}`).classList.toggle('hidden', t !== tab);
   });
-  document.querySelectorAll('.tab-btn').forEach((btn) => {
-    btn.classList.toggle('active', btn.dataset.tab === tab);
+  document.querySelectorAll('.tabbar__item').forEach((btn) => {
+    const activo = btn.dataset.tab === tab;
+    btn.classList.toggle('is-active', activo);
+    if (activo) btn.setAttribute('aria-current', 'page');
+    else btn.removeAttribute('aria-current');
   });
+
+  // El carrito (dock/hoja) sólo tiene sentido en Vender: al salir, cerrá la hoja para
+  // no dejar un carrito abierto tapando otra sección.
+  if (tab !== 'vender') cerrarSheet();
+
   // Reportes es una vista de solo lectura (arqueo / cerrar caja): tiene que re-fetchear
   // cada vez que se entra, o "Cerrar caja" mostraría totales viejos si se vendió más
   // desde la primera visita. Las otras pestañas se cachean para preservar su estado
@@ -36,6 +48,20 @@ function showTab(tab) {
   }
 }
 
+// Con el teclado del celular abierto, la tab bar/dock roban alto y pueden tapar el input.
+// Marcamos la vista mientras un campo tiene foco para ocultarlas (mitigación iOS).
+function bindTeclado(view) {
+  if (tecladoBound) return;
+  tecladoBound = true;
+  const esCampo = (el) => el && el.matches && el.matches('input, select, textarea');
+  view.addEventListener('focusin', (e) => { if (esCampo(e.target)) view.classList.add('teclado-abierto'); });
+  view.addEventListener('focusout', (e) => {
+    if (!esCampo(e.target)) return;
+    // Pequeño respiro para permitir saltar de un campo a otro sin parpadeo de la barra.
+    setTimeout(() => { if (!esCampo(document.activeElement)) view.classList.remove('teclado-abierto'); }, 120);
+  });
+}
+
 export function initFeriaView(feria, { onExit }) {
   TABS.forEach(clearTab);
   currentFeria = feria;
@@ -45,14 +71,17 @@ export function initFeriaView(feria, { onExit }) {
   view.classList.remove('hidden');
   titulo.textContent = `${feria.emoji} ${feria.nombre}`;
 
+  bindTeclado(view);
+
   if (!tabButtonsBound) {
-    document.querySelectorAll('.tab-btn').forEach((btn) => {
+    document.querySelectorAll('.tabbar__item').forEach((btn) => {
       btn.addEventListener('click', () => showTab(btn.dataset.tab));
     });
     tabButtonsBound = true;
   }
 
   document.getElementById('btn-cambiar-feria').onclick = () => {
+    cerrarSheet();
     TABS.forEach(clearTab);
     view.classList.add('hidden');
     onExit();
