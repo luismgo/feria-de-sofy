@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient.js';
-import { confirmDialog, toast, mutar, escapeHtml, formatMoney, uuid } from './ui.js';
+import { confirmDialog, toast, mutar, escapeHtml, formatMoney, uuid, promptDialog } from './ui.js';
 import { renderInsumosSection, abrirInsumosProducto } from './insumos.js';
 
 export function initInventario(feria) {
@@ -231,6 +231,7 @@ function renderProductos(feria, feriaProductos, categorias, container) {
           </label>
         </div>
         <div class="inv-producto__acciones">
+          <button class="btn-accion" data-action="editar-nombre" data-producto-id="${p.id}" data-producto-nombre="${escapeHtml(p.nombre)}" title="Cambiar el nombre de este producto">✏️ Nombre</button>
           <button class="btn-accion" data-action="ver-insumos" data-producto-id="${p.id}" data-producto-nombre="${escapeHtml(p.nombre)}" title="Insumos que este producto descuenta del stock al venderse">📦 Insumos</button>
           <button class="btn-accion" data-action="quitar-de-feria" data-id="${fp.id}" title="Se quita de esta feria; sigue en las demás">➖ Quitar de la feria</button>
           <button class="btn-accion btn-accion--peligro" data-action="eliminar-producto" data-producto-id="${p.id}" title="Borra el producto de TODAS las ferias">🗑️ Eliminar</button>
@@ -279,6 +280,22 @@ function renderProductos(feria, feriaProductos, categorias, container) {
         badge.textContent = efectivo != null ? formatMoney(efectivo) : 'Sin precio';
         badge.classList.toggle('inv-producto__precio--sin', efectivo == null);
       }
+    });
+  });
+
+  list.querySelectorAll('[data-action="editar-nombre"]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const actual = btn.dataset.productoNombre;
+      const val = await promptDialog('Nuevo nombre del producto:', { value: actual, okLabel: 'Guardar' });
+      if (val === null) return; // canceló
+      const nombre = val.trim();
+      if (!nombre) { toast('El nombre no puede quedar vacío.'); return; }
+      if (nombre === actual) return; // sin cambios
+      // Es el mismo producto en todas las ferias que lo usan, así que el nombre se
+      // actualiza en todas (correcto: es un solo catálogo compartido).
+      const { error } = await mutar(supabase.from('productos').update({ nombre }).eq('id', btn.dataset.productoId), 'No se pudo cambiar el nombre');
+      if (error) return;
+      render(feria, container);
     });
   });
 
