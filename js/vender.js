@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient.js';
-import { toast, escapeHtml, formatMoney, promptDialog, uuid, confirmDialog, abrirModal, cargando, emptyState } from './ui.js';
+import { toast, escapeHtml, formatMoney, promptDialog, uuid, confirmDialog, abrirModal, cargando, emptyState, vibrar } from './ui.js';
 import { isOnline } from './connection.js';
 
 let realtimeChannel = null;
@@ -9,6 +9,7 @@ let clientVentaIdPendiente = null;
 let descuentoActual = 0;
 let pagaConActual = ''; // "¿con cuánto te paga?" — sólo UI, nunca viaja al RPC
 let filtroBusqueda = '';
+let filtroCategoriaActiva = null; // null = "Todas"; sobrevive un re-render por realtime igual que filtroBusqueda
 let rankingCongelado = []; // ids de producto ordenados por más vendidos, calculado 1 vez por sesión de feria
 let feriaProductosActuales = [];
 let combosActuales = [];
@@ -22,6 +23,7 @@ export function initVender(feria) {
   descuentoActual = 0;
   pagaConActual = '';
   filtroBusqueda = '';
+  filtroCategoriaActiva = null;
   rankingCongelado = [];
   feriaProductosActuales = [];
   combosActuales = [];
@@ -29,7 +31,7 @@ export function initVender(feria) {
   restaurarCarrito(feria.id); // un refresh en plena feria no pierde el carrito
   resetCarritoUI();
   const container = document.getElementById('tab-vender');
-  container.innerHTML = cargando('Cargando productos...');
+  container.innerHTML = cargando('Cargando productos...', { kind: 'grid' });
 
   // initVender NO puede ser async (devuelve la función de cleanup a nav.js), así que
   // no se puede `await`. Se re-renderiza cuando el ranking resuelve, para que el orden
@@ -95,7 +97,7 @@ function clampCarritoContraStock(feriaId) {
 
 async function loadAndRender(feria, container, { refrescarCarrito = true } = {}) {
   const [{ data: feriaProductos, error: prodError }, { data: combos, error: comboError }] = await Promise.all([
-    supabase.from('feria_productos').select('id, categoria_precio_id, precio_override, productos(id, nombre, descripcion, imagen_url, stock), categorias_precio(precio)').eq('feria_id', feria.id),
+    supabase.from('feria_productos').select('id, categoria_precio_id, precio_override, productos(id, nombre, descripcion, imagen_url, stock), categorias_precio(nombre, precio)').eq('feria_id', feria.id),
     supabase.from('combos').select('*').eq('feria_id', feria.id).eq('activo', true).order('nombre'),
   ]);
 
@@ -125,12 +127,18 @@ function cantidadEnCarrito(productoId) {
   return total;
 }
 
-// Aplica el filtro del buscador ocultando/mostrando tarjetas ya renderizadas,
-// en vez de reconstruir la grilla en cada tecla (que saltaba el cursor y parpadeaba el teclado).
+// Aplica el filtro del buscador + el chip de categoría activo ocultando/mostrando tarjetas
+// ya renderizadas, en vez de reconstruir la grilla en cada tecla (que saltaba el cursor y
+// parpadeaba el teclado).
 function aplicarFiltroBusqueda(grid) {
   const term = filtroBusqueda.trim().toLowerCase();
   grid.querySelectorAll('.producto-card').forEach((card) => {
-    card.classList.toggle('hidden', !!term && !(card.dataset.nombre || '').includes(term));
+    const coincideTexto = !term || (card.dataset.nombre || '').includes(term);
+    // Las tarjetas sin categoría (sin precio, "Otro monto") no tienen data-categoria:
+    // quedan siempre visibles, filtrar por categoría nunca debe esconder "Otro monto".
+    const tieneCategoria = 'categoria' in card.dataset;
+    const coincideCategoria = !filtroCategoriaActiva || !tieneCategoria || card.dataset.categoria === filtroCategoriaActiva;
+    card.classList.toggle('hidden', !(coincideTexto && coincideCategoria));
   });
 }
 
@@ -147,7 +155,18 @@ function renderGrid(feria, feriaProductos, combos, container) {
 
   const sinNada = feriaProductos.length === 0 && combos.length === 0;
 
+  // Categorías de precio distintas presentes en esta feria, para el filtro por chips.
+  const categoriasPresentes = [...new Set(
+    feriaProductos.map((fp) => fp.categorias_precio && fp.categorias_precio.nombre).filter(Boolean),
+  )];
+  // Si la categoría activa dejó de existir (renombrada/borrada por otro dispositivo), no se
+  // queda pegada escondiendo todo el catálogo en silencio.
+  if (filtroCategoriaActiva && !categoriasPresentes.includes(filtroCategoriaActiva)) filtroCategoriaActiva = null;
+
   if (!sinNada) {
+    const header = document.createElement('div');
+    header.className = 'vender-header';
+
     const buscador = document.createElement('input');
     buscador.className = 'vender-buscador';
     buscador.type = 'search';
@@ -159,7 +178,28 @@ function renderGrid(feria, feriaProductos, combos, container) {
       const grid = container.querySelector('.productos-grid');
       if (grid) aplicarFiltroBusqueda(grid); // sin re-render: conserva foco y posición del cursor
     });
-    container.appendChild(buscador);
+    header.appendChild(buscador);
+
+    if (categoriasPresentes.length > 0) {
+      const chips = document.createElement('div');
+      chips.className = 'vender-chips';
+      chips.innerHTML = ['Todas', ...categoriasPresentes].map((nombre) => {
+        const esTodas = nombre === 'Todas';
+        const activa = esTodas ? !filtroCategoriaActiva : filtroCategoriaActiva === nombre;
+        return `<button type="button" class="chip-categoria ${activa ? 'is-active' : ''}" data-categoria="${escapeHtml(esTodas ? '' : nombre)}">${escapeHtml(nombre)}</button>`;
+      }).join('');
+      chips.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-categoria]');
+        if (!btn) return;
+        filtroCategoriaActiva = btn.dataset.categoria || null;
+        chips.querySelectorAll('.chip-categoria').forEach((c) => c.classList.toggle('is-active', c === btn));
+        const grid = container.querySelector('.productos-grid');
+        if (grid) aplicarFiltroBusqueda(grid); // sin re-render: conserva foco y posición del cursor del buscador
+      });
+      header.appendChild(chips);
+    }
+
+    container.appendChild(header);
   } else {
     const vacio = document.createElement('div');
     vacio.innerHTML = emptyState('🌸', 'Sin productos todavía', 'Agregalos en la pestaña Inventario y acá aparecen para vender.');
@@ -219,6 +259,7 @@ function renderGrid(feria, feriaProductos, combos, container) {
       grid.appendChild(card);
       return; // continúa el forEach
     }
+    if (fp.categorias_precio && fp.categorias_precio.nombre) card.dataset.categoria = fp.categorias_precio.nombre;
     card.disabled = disponible <= 0;
     card.innerHTML = `${media}${nombre}${desc}
       <span class="producto-card__precio">${formatMoney(precio)}</span>
@@ -343,6 +384,82 @@ function detalleLinea(l) {
   return 'Monto libre';
 }
 
+// Quita una línea del carrito pero deja un toast con "Deshacer": si Sofy no lo toca,
+// el quitado queda firme (comportamiento final idéntico al de antes de este cambio).
+function quitarLineaConDeshacer(feria, container, index) {
+  const linea = carrito[index];
+  if (!linea) return;
+  carrito.splice(index, 1);
+  if (carrito.length === 0) cerrarSheet();
+  refrescarVenta(feria, container);
+  toast(`Quitaste "${linea.nombre}"`, {
+    accionLabel: 'Deshacer',
+    onAccion: () => {
+      // El carrito puede haber cambiado de tamaño mientras el toast estaba abierto (otra línea
+      // quitada, un agregado nuevo): se reinserta lo más cerca posible de su posición original.
+      carrito.splice(Math.min(index, carrito.length), 0, linea);
+      refrescarVenta(feria, container);
+    },
+  });
+}
+
+// Drag-to-dismiss de la hoja del carrito: sólo desde el handle decorativo de arriba,
+// nunca desde .sheet__body (así el scroll interno de la lista de líneas queda intacto).
+function wireDragDismiss(sheet) {
+  const handle = sheet.querySelector('.carrito-sheet__handle');
+  if (!handle) return;
+  sheet.style.transform = ''; // por si quedó un drag a medias de un render anterior
+  handle.style.touchAction = 'none'; // funcional, no visual: sin esto el navegador se roba el gesto para hacer scroll de la página
+
+  const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let arrancoY = 0;
+  let arrancoT = 0;
+  let alturaSheet = 0;
+  let arrastrando = false;
+
+  const mover = (e) => {
+    if (!arrastrando) return;
+    const delta = Math.max(0, e.clientY - arrancoY); // sólo se arrastra hacia abajo, nunca hacia arriba
+    sheet.style.transform = `translateY(${delta}px)`;
+  };
+
+  const soltar = (e) => {
+    if (!arrastrando) return;
+    arrastrando = false;
+    sheet.classList.remove('carrito-sheet--arrastrando');
+    const delta = Math.max(0, e.clientY - arrancoY);
+    const duracion = Math.max(1, performance.now() - arrancoT);
+    const velocidad = delta / duracion; // px/ms
+
+    if (alturaSheet > 0 && (delta > alturaSheet * 0.35 || velocidad > 0.6)) {
+      sheet.style.transform = ''; // suelta el override inline; is-open sigue gobernando la posición
+      cerrarSheet();
+      return;
+    }
+
+    if (reduceMotion) {
+      sheet.style.transform = '';
+    } else {
+      sheet.classList.add('carrito-sheet--volviendo');
+      sheet.style.transform = '';
+      setTimeout(() => sheet.classList.remove('carrito-sheet--volviendo'), 250);
+    }
+  };
+
+  handle.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    arrastrando = true;
+    arrancoY = e.clientY;
+    arrancoT = performance.now();
+    alturaSheet = sheet.getBoundingClientRect().height;
+    sheet.classList.add('carrito-sheet--arrastrando');
+    handle.setPointerCapture(e.pointerId);
+  });
+  handle.addEventListener('pointermove', mover);
+  handle.addEventListener('pointerup', soltar);
+  handle.addEventListener('pointercancel', soltar);
+}
+
 function renderCarrito(feria, container) {
   const dock = document.getElementById('carrito-dock');
   const sheet = document.getElementById('carrito-sheet');
@@ -384,7 +501,7 @@ function renderCarrito(feria, container) {
             <button type="button" class="stepper__btn" data-action="linea-menos" data-index="${i}" aria-label="Una unidad menos">
               <svg class="icon" aria-hidden="true"><use href="#i-menos"/></svg>
             </button>
-            <span class="stepper__qty">${l.cantidad}</span>
+            <span class="stepper__qty stepper__qty--editable" data-action="editar-cantidad" data-index="${i}" role="button" tabindex="0" aria-label="Cambiar cantidad de ${escapeHtml(l.nombre)}">${l.cantidad}</span>
             <button type="button" class="stepper__btn" data-action="linea-mas" data-index="${i}" aria-label="Una unidad más" ${quedan <= 0 ? 'disabled' : ''}>
               <svg class="icon" aria-hidden="true"><use href="#i-mas"/></svg>
             </button>
@@ -451,11 +568,7 @@ function renderCarrito(feria, container) {
   sheet.querySelector('#btn-cerrar-sheet').addEventListener('click', () => cerrarSheet());
 
   sheet.querySelectorAll('[data-action="quitar-linea"]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      carrito.splice(Number(btn.dataset.index), 1);
-      if (carrito.length === 0) cerrarSheet();
-      refrescarVenta(feria, container);
-    });
+    btn.addEventListener('click', () => quitarLineaConDeshacer(feria, container, Number(btn.dataset.index)));
   });
 
   // Steppers: mutan la cantidad y re-renderizan; el foco vuelve al mismo botón
@@ -473,14 +586,37 @@ function renderCarrito(feria, container) {
         linea.cantidad += 1;
       } else {
         linea.cantidad -= 1;
-        if (linea.cantidad <= 0) carrito.splice(i, 1);
+        if (linea.cantidad <= 0) { quitarLineaConDeshacer(feria, container, i); return; } // ya cierra/refresca; no queda botón al que devolver el foco
       }
-      if (carrito.length === 0) cerrarSheet();
       refrescarVenta(feria, container);
       const mismo = sheet.querySelector(`[data-action="${accion}"][data-index="${i}"]`);
       if (mismo && !mismo.disabled) mismo.focus();
     });
   });
+
+  // Cantidad por teclado: tocar el número abre un prompt numérico en vez de tocar +/- varias veces.
+  sheet.querySelectorAll('[data-action="editar-cantidad"]').forEach((span) => {
+    const activar = async () => {
+      const i = Number(span.dataset.index);
+      const linea = carrito[i];
+      if (!linea || linea.tipo !== 'producto') return;
+      const fp = feriaProductosActuales.find((f) => f.productos.id === linea.productoId);
+      const quedan = fp ? fp.productos.stock - cantidadEnCarrito(linea.productoId) : 0; // mismo cálculo que usan los botones +/-
+      const maxPermitido = linea.cantidad + Math.max(0, quedan);
+      const val = await promptDialog(`¿Cuántas unidades de "${linea.nombre}"?`, { tipo: 'number', value: String(linea.cantidad), okLabel: 'Actualizar' });
+      if (val === null) return; // canceló
+      const nueva = Math.trunc(Number(val));
+      if (!nueva || nueva <= 0) { quitarLineaConDeshacer(feria, container, i); return; }
+      linea.cantidad = Math.min(nueva, maxPermitido);
+      refrescarVenta(feria, container);
+    };
+    span.addEventListener('click', activar);
+    span.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activar(); }
+    });
+  });
+
+  wireDragDismiss(sheet);
 
   sheet.querySelector('#btn-vaciar-carrito').addEventListener('click', async () => {
     if (carrito.length === 0) return;
@@ -598,6 +734,7 @@ function renderCarrito(feria, container) {
     pagaConActual = '';
     persistirCarrito(feria.id);
     cerrarSheet();
+    vibrar();
     if (window.confetti) window.confetti({ particleCount: 120, spread: 80, origin: { y: 0.7 } });
     toast(`¡Venta registrada! 🎉 Total: ${formatMoney(data[0].total)}`, { tipo: 'exito' });
     loadAndRender(feria, container);
