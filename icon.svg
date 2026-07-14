@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <!-- Fondo: cuadrado redondeado en color de acento, como base "maskable" -->
+  <rect width="192" height="192" rx="42" fill="#B4531F" />
+  <!-- Glifo de flor: mismo estilo de trazo que el sprite de iconos de index.html (stroke, sin relleno pesado) -->
+  <g fill="none" stroke="#F7F2ED" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="96" cy="72" r="17" />
+    <circle cx="124" cy="96" r="17" />
+    <circle cx="96" cy="120" r="17" />
+    <circle cx="68" cy="96" r="17" />
+    <circle cx="96" cy="96" r="13" fill="#F7F2ED" stroke="none" />
+    <path d="M96 138v14" />
+    <path d="M96 152q-16 0-16 14" />
+  </g>
+</svg>
