@@ -4,7 +4,7 @@ import { renderInsumosSection, abrirInsumosProducto } from './insumos.js';
 
 export function initInventario(feria) {
   const container = document.getElementById('tab-inventario');
-  container.innerHTML = cargando('Cargando inventario...');
+  container.innerHTML = cargando('Cargando inventario...', { kind: 'lista' });
   render(feria, container);
   return () => {};
 }
@@ -16,6 +16,20 @@ function bindToggleForm(container, toggleSel, formSel) {
   btn.addEventListener('click', () => {
     form.classList.toggle('hidden');
     if (!form.classList.contains('hidden')) form.querySelector('input, select')?.focus();
+  });
+}
+
+// Cablea el FAB que despliega y lleva (scroll + foco) hasta un formulario de alta.
+// Con muchos productos, el botón "Agregar" al final de la lista queda a varios scrolls
+// de distancia; el FAB lo resuelve sin importar dónde esté parada la usuaria.
+function bindFab(container, fabSel, formSel) {
+  const fab = container.querySelector(fabSel);
+  const form = container.querySelector(formSel);
+  fab.addEventListener('click', () => {
+    form.classList.remove('hidden');
+    const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+    form.scrollIntoView({ behavior, block: 'center' });
+    form.querySelector('input, select')?.focus({ preventScroll: true });
   });
 }
 
@@ -87,11 +101,16 @@ async function render(feria, container) {
     </section>
 
     <section class="card" id="inv-insumos-section"></section>
+
+    <button type="button" class="inv-fab" id="inv-fab-producto" aria-label="Ir a agregar producto" title="Ir a agregar producto">
+      <svg class="icon" aria-hidden="true"><use href="#i-mas"/></svg>
+    </button>
   `;
 
   bindToggleForm(container, '[data-toggle-categoria]', '#form-categoria');
   bindToggleForm(container, '[data-toggle-combo]', '#form-combo');
   bindToggleForm(container, '[data-toggle-producto]', '#form-producto');
+  bindFab(container, '#inv-fab-producto', '#form-producto');
 
   renderCategorias(feria, categorias, container);
   renderCombos(feria, combos, container);

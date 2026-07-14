@@ -5,9 +5,22 @@ const TIPOS = { producto: '💡 Producto', logistica: '📋 Logística', precio:
 
 export function initIdeas(feria) {
   const container = document.getElementById('tab-ideas');
-  container.innerHTML = cargando('Cargando ideas...');
+  container.innerHTML = cargando('Cargando ideas...', { kind: 'lista' });
   render(feria, container, 'todos');
   return () => {};
+}
+
+// Cablea el FAB que lleva (scroll + foco) hasta el formulario de alta de idea, al final
+// de la lista. Con muchas ideas anotadas, ese formulario queda lejos del punto donde
+// la usuaria está mirando.
+function bindFab(container, fabSel, formSel) {
+  const fab = container.querySelector(fabSel);
+  const form = container.querySelector(formSel);
+  fab.addEventListener('click', () => {
+    const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+    form.scrollIntoView({ behavior, block: 'center' });
+    form.querySelector('input, select')?.focus({ preventScroll: true });
+  });
 }
 
 async function render(feria, container, filtro) {
@@ -40,7 +53,7 @@ async function render(feria, container, filtro) {
             <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg> Borrar
           </button>
         </div>
-      `).join('') || emptyState('💡', 'Sin ideas todavía', 'Anotá acá lo que se te ocurra en plena feria: productos, precios, pendientes.')}
+      `).join('') || emptyState('💡', 'Sin ideas todavía', 'Anotá acá lo que se te ocurra en plena feria: productos, precios, pendientes.', 'ideas')}
     </div>
     <form id="form-nota" class="card form-nota">
       <label class="field">
@@ -57,7 +70,13 @@ async function render(feria, container, filtro) {
         <button type="submit" class="btn btn--primary">Agregar</button>
       </div>
     </form>
+
+    <button type="button" class="ideas-fab" id="ideas-fab-nota" aria-label="Ir a agregar idea" title="Ir a agregar idea">
+      <svg class="icon" aria-hidden="true"><use href="#i-mas"/></svg>
+    </button>
   `;
+
+  bindFab(container, '#ideas-fab-nota', '#form-nota');
 
   container.querySelectorAll('[data-filtro]').forEach((btn) => {
     btn.addEventListener('click', () => render(feria, container, btn.dataset.filtro));
