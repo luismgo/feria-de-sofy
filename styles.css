@@ -241,6 +241,22 @@ button:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .empty__titulo { font-family: var(--font-display); font-weight: 700; font-size: var(--fs-title3); margin: 0 0 4px; }
 .empty__hint { color: var(--ink-2); font-size: var(--fs-subhead); margin: 0; }
 
+/* Variantes de color del badge (emoji circular) según la sección vacía.
+   Cada una reusa un color semántico ya existente vía color-mix(), igual
+   que --accent-soft; el badge base sigue siendo solo texto cuando no hay
+   variante (compatibilidad con los call-sites que no la pasan). */
+.empty__emoji--productos,
+.empty__emoji--ideas,
+.empty__emoji--reportes {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 64px; height: 64px;
+  border-radius: 50%;
+  font-size: 1.8rem;
+}
+.empty__emoji--productos { background: var(--accent-soft); }
+.empty__emoji--ideas { background: color-mix(in srgb, var(--warning-bg) 55%, var(--surface)); }
+.empty__emoji--reportes { background: color-mix(in srgb, var(--success) 16%, var(--surface)); }
+
 /* Loading */
 .loading {
   display: flex; flex-direction: column; align-items: center; gap: 10px;
@@ -258,6 +274,48 @@ button:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }
   .spinner { animation: girar 0.8s linear infinite; }
 }
 @keyframes girar { to { transform: rotate(1turn); } }
+
+/* ============ Skeletons (cargando con kind) ============ */
+
+/* Wrapper: sin layout propio, lo da el modificador --grid/--lista/--reporte. */
+.skeleton { display: block; width: 100%; }
+
+.skeleton--grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(126px, 1fr));
+  gap: var(--sp-3);
+}
+.skeleton--lista { display: flex; flex-direction: column; gap: var(--sp-3); }
+.skeleton--reporte { display: flex; flex-direction: column; gap: var(--sp-3); }
+
+.skeleton__card {
+  height: 152px;
+  border-radius: var(--r-lg);
+  background: linear-gradient(100deg, var(--surface-2) 30%, var(--border) 50%, var(--surface-2) 70%);
+  background-size: 200% 100%;
+}
+/* En --reporte las cards son más anchas y bajas que las de --grid. */
+.skeleton--reporte .skeleton__card { height: 92px; }
+
+.skeleton__row {
+  width: 100%;
+  height: 64px;
+  border-radius: var(--r-md);
+  background: linear-gradient(100deg, var(--surface-2) 30%, var(--border) 50%, var(--surface-2) 70%);
+  background-size: 200% 100%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .skeleton__card, .skeleton__row { animation: skeleton-shimmer 1.4s ease-in-out infinite; }
+  @keyframes skeleton-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+}
+/* Sin animación: fondo neutro plano en vez del gradiente en movimiento. */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton__card, .skeleton__row { background: var(--surface-2); }
+}
 
 /* ============ Segmented control ============ */
 
@@ -306,6 +364,16 @@ button:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
+/* Editable por teclado: abre un prompt numérico al tocarla. */
+.stepper__qty--editable {
+  cursor: pointer;
+  padding: 2px 7px;
+  border-radius: var(--r-sm);
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+.stepper__qty--editable:hover,
+.stepper__qty--editable:active { background: var(--surface); }
 
 /* ============ Nav bar superior (3 columnas) ============ */
 
@@ -357,6 +425,10 @@ button:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 }
 #feria-view .feria-scroll { padding-bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 16px); }
 #feria-view[data-tab="vender"] .feria-scroll { padding-bottom: calc(var(--tabbar-h) + var(--dock-h) + var(--safe-bottom) + 24px); }
+/* Inventario/Ideas tienen un FAB flotante (56px + 8px de aire) sobre la tab bar: reservamos
+   ese alto extra para que el botón "Guardar"/"Agregar" del final del formulario no quede tapado. */
+#feria-view[data-tab="inventario"] .feria-scroll,
+#feria-view[data-tab="ideas"] .feria-scroll { padding-bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 88px); }
 #reporte-general .feria-scroll { padding-bottom: calc(var(--safe-bottom) + 24px); }
 
 .tab-panel { padding: 0; }
@@ -395,7 +467,26 @@ button:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* Con el teclado abierto damos aire ocultando la barra inferior y el dock. */
 #feria-view.teclado-abierto .tabbar,
-#feria-view.teclado-abierto .carrito-dock { display: none !important; }
+#feria-view.teclado-abierto .carrito-dock,
+#feria-view.teclado-abierto .inv-fab,
+#feria-view.teclado-abierto .ideas-fab { display: none !important; }
+
+/* ============ FAB (Inventario / Ideas) ============ */
+
+.inv-fab, .ideas-fab {
+  position: fixed;
+  right: 16px;
+  bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 8px);
+  z-index: var(--z-dock);
+  width: 56px; height: 56px;
+  display: grid; place-items: center;
+  background: var(--accent-strong);
+  color: #fff;
+  border-radius: 50%;
+  box-shadow: var(--shadow-2);
+  padding: 0;
+}
+.inv-fab .icon, .ideas-fab .icon { width: 26px; height: 26px; stroke-width: 2.2; }
 
 /* ============ Carrito: mini-dock + hoja ============ */
 
@@ -448,6 +539,12 @@ button:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .carrito-sheet.is-open { transform: translateY(0); visibility: visible; }
 @media (prefers-reduced-motion: no-preference) {
   .carrito-sheet { transition: transform 0.28s ease, visibility 0.28s; }
+}
+/* Mientras se arrastra, el JS mueve translateY en vivo: ninguna transition debe interferir. */
+.carrito-sheet--arrastrando { transition: none !important; }
+/* Al soltar sin pasar el umbral, un rebote corto de vuelta a 0. */
+@media (prefers-reduced-motion: no-preference) {
+  .carrito-sheet--volviendo { transition: transform 0.25s cubic-bezier(0.32, 0.72, 0, 1); }
 }
 .sheet__handle, .carrito-sheet__handle {
   flex: none;
@@ -502,23 +599,54 @@ button:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .modal-actions { display: flex; gap: 10px; margin-top: var(--sp-4); }
 .modal-actions .btn { flex: 1; }
 
-.toast {
+/* Contenedor apilable: ancla la posición (igual que el .toast suelto de antes),
+   cada toast es un hijo en flujo normal — así 2+ toasts visibles a la vez se apilan
+   en vez de superponerse exactamente en el mismo lugar. */
+.toast-stack {
   position: fixed;
   bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 16px);
-  left: 50%; transform: translate(-50%, 20px);
+  left: 50%; transform: translateX(-50%);
+  z-index: var(--z-toast);
+  display: flex; flex-direction: column; align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 32px);
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  transform: translateY(20px);
   background: var(--ink); color: #fff;
   padding: 12px 18px;
   border-radius: var(--r-md);
   font-size: var(--fs-subhead); font-weight: 500;
   opacity: 0; transition: all 0.3s;
-  z-index: var(--z-toast);
-  max-width: calc(100vw - 32px);
+  max-width: 100%;
   text-align: center;
   box-shadow: var(--shadow-2);
 }
-.toast--visible { opacity: 1; transform: translate(-50%, 0); }
+.toast--visible { opacity: 1; transform: translateY(0); }
 .toast--exito { border-left: 4px solid #6FCF79; }
 .toast--error { border-left: 4px solid #F08A80; }
+
+/* Con botón de acción (ej. "Deshacer"): el mensaje se alinea a la izquierda
+   y el botón queda separado a la derecha, sin tocar el toast simple. */
+.toast:has(.toast__accion) {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--sp-3);
+  text-align: left;
+}
+.toast__accion {
+  flex: none;
+  background: color-mix(in srgb, #fff 18%, transparent);
+  color: #fff;
+  font-weight: 700;
+  font-size: var(--fs-footnote);
+  border-radius: var(--r-full);
+  padding: 7px 14px;
+  min-height: 32px;
+  white-space: nowrap;
+}
+.toast__accion:active { background: color-mix(in srgb, #fff 30%, transparent); }
 
 /* ============ Login ============ */
 
@@ -642,6 +770,38 @@ button:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* Envuelve buscador + chips en una sola unidad pegada arriba de la grilla,
+   en vez de dos elementos sueltos. Sangra a los bordes de .feria-scroll
+   y los recupera con padding, con un hairline abajo que la separa de la grilla. */
+.vender-header {
+  position: sticky; top: -12px; z-index: 4;
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  margin: -12px -16px var(--sp-3);
+  padding: 12px 16px var(--sp-2);
+  background: var(--bg);
+  border-bottom: 1px solid var(--hairline);
+}
+.vender-chips {
+  display: flex; gap: var(--sp-2);
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.chip-categoria {
+  flex: none;
+  white-space: nowrap;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 44px;
+  background: var(--surface-2); color: var(--ink-2);
+  border: none; box-shadow: none;
+  border-radius: var(--r-full);
+  padding: 8px 16px;
+  font-weight: 600; font-size: var(--fs-footnote);
+}
+.chip-categoria.is-active {
+  background: var(--accent-strong); color: #fff;
+  font-weight: 700;
 }
 
 .combos-row { display: flex; gap: var(--sp-2); overflow-x: auto; margin-bottom: var(--sp-3); padding-bottom: 2px; }
@@ -833,6 +993,19 @@ button:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .cierre-hero { text-align: center; padding: var(--sp-2) 0 var(--sp-3); }
 .cierre-hero .stat__label { margin: 0; }
 .cierre-hero__monto { font-size: var(--fs-title1); font-weight: 800; margin: 2px 0 0; color: var(--ink); }
+/* Racha de cajas cuadradas: badge cálido, se siente un logro. Se oculta con [hidden] desde el JS. */
+.cierre-hero__racha {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin-top: 8px;
+  padding: 6px 14px;
+  background: var(--success-soft);
+  color: var(--success);
+  border-radius: var(--r-full);
+  font-weight: 700; font-size: var(--fs-footnote);
+}
+/* display:inline-flex de arriba gana por especificidad al [hidden] del UA stylesheet
+   (que solo pone display:none) — sin esto, racha=0 se seguiría viendo igual. */
+.cierre-hero__racha[hidden] { display: none; }
 .cierre-diferencia {
   display: flex; justify-content: space-between; align-items: center;
   gap: var(--sp-2);
@@ -863,6 +1036,19 @@ button:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .barra-rank { position: relative; height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
 .barra-rank__fill { position: absolute; inset: 0 auto 0 0; background: var(--accent); border-radius: 4px; }
 
+/* Fila de "Por categoría de precio": mismo shape que .rank-fila pero sin posición numerada. */
+.categoria-fila {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(56px, 26%) auto;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 8px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+.categoria-fila:last-child { border-bottom: none; }
+.categoria-fila__nombre { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-subhead); }
+.categoria-fila__monto { font-weight: 700; text-align: right; }
+
 .historial-dia__titulo { font-weight: 700; }
 .historial-dia__meta { font-size: var(--fs-caption); color: var(--ink-2); font-weight: 500; }
 .historial-dia__total { margin-left: auto; padding-right: 4px; }
@@ -876,12 +1062,13 @@ button:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
 @media (prefers-reduced-motion: no-preference) {
   .btn, .btn-accion, .producto-card, .feria-card, .combo-btn,
-  .segmented__item, .stepper__btn {
+  .segmented__item, .stepper__btn, .chip-categoria {
     transition: transform 0.12s ease, background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
   }
   .btn:active:not(:disabled), .btn-accion:active,
   .producto-card:active:not(:disabled), .feria-card:active,
-  .combo-btn:active, .stepper__btn:active:not(:disabled) {
+  .combo-btn:active, .stepper__btn:active:not(:disabled),
+  .chip-categoria:active {
     transform: scale(0.97);
   }
   .idea-texto { transition: opacity 0.2s ease; }
@@ -897,4 +1084,7 @@ button:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }
   .carrito-sheet { left: 50%; right: auto; width: 700px; max-width: 100%; transform: translateX(-50%) translateY(100%); }
   .carrito-sheet.is-open { transform: translateX(-50%) translateY(0); }
   .productos-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  /* #feria-view queda centrado en un contenedor de 700px: el FAB debe seguir
+     pegado a SU borde derecho, no al del viewport. */
+  .inv-fab, .ideas-fab { right: calc(50vw - 350px + 16px); }
 }
