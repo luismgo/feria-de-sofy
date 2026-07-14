@@ -37,11 +37,12 @@ function showTab(tab) {
   // no dejar un carrito abierto tapando otra sección.
   if (tab !== 'vender') cerrarSheet();
 
-  // Reportes es una vista de solo lectura (arqueo / cerrar caja): tiene que re-fetchear
-  // cada vez que se entra, o "Cerrar caja" mostraría totales viejos si se vendió más
-  // desde la primera visita. Las otras pestañas se cachean para preservar su estado
-  // (ej. el carrito de Vender no se debe vaciar al cambiar de pestaña y volver).
-  if (tab === 'reportes') clearTab(tab);
+  // Reportes e Inventario son vistas que dependen de datos que cambian desde OTRO lado
+  // (una venta en Vender descuenta stock; poner un precio "al vuelo" en Vender actualiza
+  // feria_productos) y no tienen suscripción realtime propia — re-fetchear al entrar es
+  // la única forma de no mostrar stock/precio viejo. Vender e Ideas sí se cachean para
+  // preservar su estado (ej. el carrito de Vender no se debe vaciar al cambiar de pestaña).
+  if (tab === 'reportes' || tab === 'inventario') clearTab(tab);
   if (!currentCleanups[tab]) {
     const cleanup = INIT_FNS[tab](currentFeria);
     currentCleanups[tab] = cleanup || (() => {});
