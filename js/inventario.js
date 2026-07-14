@@ -89,10 +89,10 @@ async function render(feria, container) {
       <form id="form-producto" class="form-alta hidden">
         ${campo({ label: 'Nombre del producto', input: '<input name="nombre" class="input" placeholder="Ej: Sticker mariposa" required />' })}
         ${campo({ label: 'Descripción (opcional)', hint: 'Ej: medidas. Útil para distinguir productos con el mismo nombre.', input: '<input name="descripcion" class="input" placeholder="Ej: 5x3cm" />' })}
-        ${campo({ label: 'Categoría de precio', hint: 'Podés dejarlo sin categoría y ponerle precio después, desde Vender.', input: `
+        ${campo({ label: 'Categoría de precio', hint: 'La mayoría de los productos van en una categoría de precio. Elegí "Sin categoría" solo si este necesita un precio propio (lo ponés después, desde Vender).', input: `
           <select name="categoria_precio_id" class="input">
-            <option value="">Sin categoría</option>
             ${categorias.map((c) => `<option value="${c.id}">${escapeHtml(c.nombre)} (${formatMoney(c.precio)})</option>`).join('')}
+            <option value="">Sin categoría — precio individual</option>
           </select>` })}
         ${campo({ label: 'Stock inicial', input: '<input name="stock" class="input" type="number" min="0" inputmode="numeric" placeholder="Ej: 20" required />' })}
         ${campo({ label: 'Foto (opcional)', input: '<input name="foto" class="input input--file" type="file" accept="image/*" />' })}
@@ -284,8 +284,8 @@ function renderProductos(feria, feriaProductos, categorias, container) {
           <label class="inv-mini-label">Costo $ <input type="number" class="inv-costo-input" data-producto-id="${p.id}" value="${p.costo ?? 0}" min="0" step="1" /></label>
           <label class="inv-mini-label">Categoría
             <select class="inv-categoria-select" data-id="${fp.id}">
-              <option value="">Sin categoría</option>
               ${categorias.map((c) => `<option value="${c.id}" ${fp.categoria_precio_id === c.id ? 'selected' : ''}>${escapeHtml(c.nombre)} — ${formatMoney(c.precio)}</option>`).join('')}
+              <option value="" ${fp.categoria_precio_id ? '' : 'selected'}>Sin categoría — precio individual</option>
             </select>
           </label>
         </div>
