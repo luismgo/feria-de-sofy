@@ -930,6 +930,33 @@ button:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .inv-producto__controls select { min-width: 140px; }
 .inv-producto__acciones { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
 
+/* Agrupado de productos por categoría de precio: colapsado por default (mismo patrón
+   de acordeón que .historial-dia en Reportes), para que la lista se pueda navegar
+   aunque haya muchos productos en muchas categorías. */
+.inv-cat-grupo { border-bottom: 1px solid var(--hairline); }
+.inv-cat-grupo:last-child { border-bottom: none; }
+.inv-cat-grupo > summary {
+  list-style: none;
+  display: flex; align-items: center; gap: var(--sp-2);
+  min-height: 48px; padding: 10px 0;
+  cursor: pointer;
+  font-weight: 700;
+}
+.inv-cat-grupo > summary::-webkit-details-marker { display: none; }
+.inv-cat-grupo > summary::after {
+  content: '';
+  width: 8px; height: 8px;
+  border-right: 2px solid var(--ink-2);
+  border-bottom: 2px solid var(--ink-2);
+  transform: rotate(-45deg);
+  margin-left: auto;
+  flex: none;
+  transition: transform 0.15s ease;
+}
+.inv-cat-grupo[open] > summary::after { transform: rotate(45deg); }
+.inv-cat-grupo__conteo { font-size: var(--fs-caption); font-weight: 500; color: var(--ink-2); white-space: nowrap; }
+.inv-cat-grupo .inv-list { padding-bottom: var(--sp-2); }
+
 /* ============ Ideas ============ */
 
 .segmented--scroll { overflow-x: auto; }

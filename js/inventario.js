@@ -260,55 +260,82 @@ function renderCombos(feria, combos, container) {
   });
 }
 
+// Fila de un producto (sin cambios de comportamiento — solo se movió a función aparte
+// para poder agruparla por categoría en renderProductos).
+function filaProducto(fp, categorias) {
+  const p = fp.productos;
+  const categoria = categorias.find((c) => c.id === fp.categoria_precio_id);
+  const precio = fp.precio_override != null ? fp.precio_override : (categoria ? categoria.precio : null);
+  const precioBadge = precio != null
+    ? `<span class="inv-producto__precio">${formatMoney(precio)}</span>`
+    : `<span class="inv-producto__precio inv-producto__precio--sin">Sin precio</span>`;
+  return `
+    <div class="inv-producto" data-id="${fp.id}" data-override="${fp.precio_override ?? ''}">
+      <div class="inv-producto__head">
+        ${p.imagen_url ? `<img class="row__foto" src="${p.imagen_url}" alt="${escapeHtml(p.nombre)}" />` : '<span class="row__foto row__foto--sin" aria-hidden="true">🌸</span>'}
+        <span class="inv-producto__nombre-wrap">
+          <span class="inv-producto__nombre">${escapeHtml(p.nombre)}</span>
+          ${p.descripcion ? `<span class="inv-producto__desc">${escapeHtml(p.descripcion)}</span>` : ''}
+        </span>
+        ${precioBadge}
+      </div>
+      <div class="inv-producto__controls">
+        <label class="inv-mini-label">Stock <input type="number" class="inv-stock-input" data-producto-id="${p.id}" value="${p.stock}" min="0" /></label>
+        <label class="inv-mini-label">Costo $ <input type="number" class="inv-costo-input" data-producto-id="${p.id}" value="${p.costo ?? 0}" min="0" step="1" /></label>
+        <label class="inv-mini-label">Categoría
+          <select class="inv-categoria-select" data-id="${fp.id}">
+            ${categorias.map((c) => `<option value="${c.id}" ${fp.categoria_precio_id === c.id ? 'selected' : ''}>${escapeHtml(c.nombre)} — ${formatMoney(c.precio)}</option>`).join('')}
+            <option value="" ${fp.categoria_precio_id ? '' : 'selected'}>Sin categoría — precio individual</option>
+          </select>
+        </label>
+      </div>
+      <div class="inv-producto__acciones">
+        <button class="btn-accion" data-action="editar-nombre" data-producto-id="${p.id}" data-producto-nombre="${escapeHtml(p.nombre)}" title="Cambiar el nombre de este producto">
+          <svg class="icon" aria-hidden="true"><use href="#i-editar"/></svg> Nombre
+        </button>
+        <button class="btn-accion" data-action="editar-descripcion" data-producto-id="${p.id}" data-producto-descripcion="${escapeHtml(p.descripcion || '')}" title="Descripción corta (ej. medidas) para distinguir productos con el mismo nombre">
+          <svg class="icon" aria-hidden="true"><use href="#i-editar"/></svg> Descripción
+        </button>
+        <button class="btn-accion" data-action="ver-insumos" data-producto-id="${p.id}" data-producto-nombre="${escapeHtml(p.nombre)}" title="Insumos que este producto descuenta del stock al venderse">
+          <svg class="icon" aria-hidden="true"><use href="#i-inventario"/></svg> Insumos
+        </button>
+        <button class="btn-accion" data-action="quitar-de-feria" data-id="${fp.id}" title="Se quita de esta feria; sigue en las demás">
+          <svg class="icon" aria-hidden="true"><use href="#i-quitar"/></svg> Quitar de la feria
+        </button>
+        <button class="btn-accion btn-accion--peligro" data-action="eliminar-producto" data-producto-id="${p.id}" title="Borra el producto de TODAS las ferias">
+          <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg> Eliminar
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+// Agrupados por categoría de precio (con "Sin categoría" al final) para que la lista se
+// pueda navegar aunque haya muchos productos en muchas categorías — antes era una sola
+// lista plana. Colapsados por default: se ve el panorama (categoría + cuántos productos)
+// y se abre solo la que hace falta. Si queda un único grupo, no tiene sentido colapsarlo.
 function renderProductos(feria, feriaProductos, categorias, container) {
   const list = container.querySelector('#inv-productos');
-  list.innerHTML = feriaProductos.map((fp) => {
-    const p = fp.productos;
-    const categoria = categorias.find((c) => c.id === fp.categoria_precio_id);
-    const precio = fp.precio_override != null ? fp.precio_override : (categoria ? categoria.precio : null);
-    const precioBadge = precio != null
-      ? `<span class="inv-producto__precio">${formatMoney(precio)}</span>`
-      : `<span class="inv-producto__precio inv-producto__precio--sin">Sin precio</span>`;
-    return `
-      <div class="inv-producto" data-id="${fp.id}" data-override="${fp.precio_override ?? ''}">
-        <div class="inv-producto__head">
-          ${p.imagen_url ? `<img class="row__foto" src="${p.imagen_url}" alt="${escapeHtml(p.nombre)}" />` : '<span class="row__foto row__foto--sin" aria-hidden="true">🌸</span>'}
-          <span class="inv-producto__nombre-wrap">
-            <span class="inv-producto__nombre">${escapeHtml(p.nombre)}</span>
-            ${p.descripcion ? `<span class="inv-producto__desc">${escapeHtml(p.descripcion)}</span>` : ''}
-          </span>
-          ${precioBadge}
-        </div>
-        <div class="inv-producto__controls">
-          <label class="inv-mini-label">Stock <input type="number" class="inv-stock-input" data-producto-id="${p.id}" value="${p.stock}" min="0" /></label>
-          <label class="inv-mini-label">Costo $ <input type="number" class="inv-costo-input" data-producto-id="${p.id}" value="${p.costo ?? 0}" min="0" step="1" /></label>
-          <label class="inv-mini-label">Categoría
-            <select class="inv-categoria-select" data-id="${fp.id}">
-              ${categorias.map((c) => `<option value="${c.id}" ${fp.categoria_precio_id === c.id ? 'selected' : ''}>${escapeHtml(c.nombre)} — ${formatMoney(c.precio)}</option>`).join('')}
-              <option value="" ${fp.categoria_precio_id ? '' : 'selected'}>Sin categoría — precio individual</option>
-            </select>
-          </label>
-        </div>
-        <div class="inv-producto__acciones">
-          <button class="btn-accion" data-action="editar-nombre" data-producto-id="${p.id}" data-producto-nombre="${escapeHtml(p.nombre)}" title="Cambiar el nombre de este producto">
-            <svg class="icon" aria-hidden="true"><use href="#i-editar"/></svg> Nombre
-          </button>
-          <button class="btn-accion" data-action="editar-descripcion" data-producto-id="${p.id}" data-producto-descripcion="${escapeHtml(p.descripcion || '')}" title="Descripción corta (ej. medidas) para distinguir productos con el mismo nombre">
-            <svg class="icon" aria-hidden="true"><use href="#i-editar"/></svg> Descripción
-          </button>
-          <button class="btn-accion" data-action="ver-insumos" data-producto-id="${p.id}" data-producto-nombre="${escapeHtml(p.nombre)}" title="Insumos que este producto descuenta del stock al venderse">
-            <svg class="icon" aria-hidden="true"><use href="#i-inventario"/></svg> Insumos
-          </button>
-          <button class="btn-accion" data-action="quitar-de-feria" data-id="${fp.id}" title="Se quita de esta feria; sigue en las demás">
-            <svg class="icon" aria-hidden="true"><use href="#i-quitar"/></svg> Quitar de la feria
-          </button>
-          <button class="btn-accion btn-accion--peligro" data-action="eliminar-producto" data-producto-id="${p.id}" title="Borra el producto de TODAS las ferias">
-            <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg> Eliminar
-          </button>
-        </div>
-      </div>
-    `;
-  }).join('') || '<p class="list-empty">Todavía no hay productos en esta feria</p>';
+
+  const grupos = categorias.map((c) => ({
+    titulo: `${escapeHtml(c.nombre)} — ${formatMoney(c.precio)}`,
+    productos: feriaProductos.filter((fp) => fp.categoria_precio_id === c.id),
+  }));
+  const sinCategoria = feriaProductos.filter((fp) => !fp.categoria_precio_id);
+  if (sinCategoria.length > 0) grupos.push({ titulo: 'Sin categoría — precio individual', productos: sinCategoria });
+
+  const gruposConProductos = grupos.filter((g) => g.productos.length > 0);
+  const abrirSolo = gruposConProductos.length <= 1;
+
+  list.innerHTML = gruposConProductos.map((g) => `
+    <details class="inv-cat-grupo" ${abrirSolo ? 'open' : ''}>
+      <summary>
+        <span class="inv-cat-grupo__titulo">${g.titulo}</span>
+        <span class="inv-cat-grupo__conteo">${g.productos.length === 1 ? '1 producto' : `${g.productos.length} productos`}</span>
+      </summary>
+      <div class="inv-list">${g.productos.map((fp) => filaProducto(fp, categorias)).join('')}</div>
+    </details>
+  `).join('') || '<p class="list-empty">Todavía no hay productos en esta feria</p>';
 
   list.querySelectorAll('.inv-stock-input').forEach((input) => {
     input.addEventListener('change', async () => {
