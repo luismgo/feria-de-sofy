@@ -124,17 +124,54 @@ export function promptDialog(message, { placeholder = '', value = '', okLabel = 
 }
 
 // --- Toast ---
+// Varios toasts pueden estar visibles a la vez (ej. dos "Deshacer" seguidos): todos
+// viven dentro de un único contenedor apilable en vez de tirarse sueltos al body,
+// para que el más nuevo no tape literalmente al anterior.
+function toastStack() {
+  let stack = document.getElementById('toast-stack');
+  if (!stack) {
+    stack = document.createElement('div');
+    stack.id = 'toast-stack';
+    stack.className = 'toast-stack';
+    document.body.appendChild(stack);
+  }
+  return stack;
+}
+
 // tipo: 'exito' | 'error' | undefined (neutro)
-export function toast(message, { tipo } = {}) {
+// accionLabel + onAccion: agrega un botón (ej. "Deshacer") que ejecuta onAccion()
+// y cierra el toast de inmediato. Sin ellos, comportamiento idéntico al de siempre.
+export function toast(message, { tipo, accionLabel, onAccion } = {}) {
   const el = document.createElement('div');
   el.className = `toast${tipo ? ` toast--${tipo}` : ''}`;
-  el.textContent = message;
-  document.body.appendChild(el);
+
+  let cerrarAhora = () => {};
+  if (accionLabel && onAccion) {
+    const texto = document.createElement('span');
+    texto.textContent = message;
+    const boton = document.createElement('button');
+    boton.type = 'button';
+    boton.className = 'toast__accion';
+    boton.textContent = accionLabel;
+    boton.addEventListener('click', () => { onAccion(); cerrarAhora(); });
+    el.append(texto, boton);
+  } else {
+    el.textContent = message;
+  }
+
+  toastStack().appendChild(el);
   setTimeout(() => el.classList.add('toast--visible'), 10);
-  setTimeout(() => {
+  const ocultarTimeout = setTimeout(() => {
     el.classList.remove('toast--visible');
     setTimeout(() => el.remove(), 300);
   }, 2500);
+
+  // Cierre anticipado (botón de acción): cancela el timeout de auto-ocultado pendiente
+  cerrarAhora = () => {
+    clearTimeout(ocultarTimeout);
+    el.classList.remove('toast--visible');
+    setTimeout(() => el.remove(), 300);
+  };
 }
 
 // --- Helpers de template ---
@@ -152,24 +189,46 @@ export function campo({ label, hint = '', input }) {
 }
 
 // Estado vacío de panel: emoji + título + pista de qué hacer.
-export function emptyState(emoji, titulo, hint = '') {
+// variante: 'productos' | 'ideas' | 'reportes' | undefined -- tinte de color del badge por sección.
+export function emptyState(emoji, titulo, hint = '', variante) {
   return `
     <div class="empty">
-      <span class="empty__emoji" aria-hidden="true">${emoji}</span>
+      <span class="empty__emoji${variante ? ` empty__emoji--${variante}` : ''}" aria-hidden="true">${emoji}</span>
       <p class="empty__titulo">${escapeHtml(titulo)}</p>
       ${hint ? `<p class="empty__hint">${escapeHtml(hint)}</p>` : ''}
     </div>
   `;
 }
 
-// Estado de carga: spinner + texto.
-export function cargando(texto = 'Cargando...') {
+// Estado de carga. Sin kind: spinner + texto (igual que siempre).
+// Con kind ('grid' | 'lista' | 'reporte'): esqueleto pulsante con la forma aproximada
+// del contenido real, para que el layout no salte cuando llegan los datos.
+export function cargando(texto = 'Cargando...', { kind } = {}) {
+  if (!kind) {
+    return `
+      <div class="loading" role="status">
+        <span class="spinner" aria-hidden="true"></span>
+        <span>${escapeHtml(texto)}</span>
+      </div>
+    `;
+  }
+  const conteos = { grid: 6, lista: 5, reporte: 3 };
+  const bloque = kind === 'lista' ? 'skeleton__row' : 'skeleton__card';
+  const cantidad = conteos[kind] ?? conteos.grid;
+  const variante = conteos[kind] ? kind : 'grid';
   return `
-    <div class="loading" role="status">
-      <span class="spinner" aria-hidden="true"></span>
-      <span>${escapeHtml(texto)}</span>
+    <div class="skeleton skeleton--${variante}" role="status" aria-label="${escapeHtml(texto)}">
+      ${Array.from({ length: cantidad }, () => `<div class="${bloque}"></div>`).join('')}
     </div>
   `;
+}
+
+// Vibración táctil corta (confirmar tap, alertar error). Feature-detection: no-op
+// en navegadores/dispositivos sin soporte (ej. iOS Safari), nunca lanza.
+export function vibrar(ms = 15) {
+  if (navigator.vibrate) {
+    try { navigator.vibrate(ms); } catch {}
+  }
 }
 
 // Ejecuta una escritura de Supabase y avisa por toast si falla, en vez de fallar en silencio.
