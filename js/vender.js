@@ -95,7 +95,7 @@ function clampCarritoContraStock(feriaId) {
 
 async function loadAndRender(feria, container, { refrescarCarrito = true } = {}) {
   const [{ data: feriaProductos, error: prodError }, { data: combos, error: comboError }] = await Promise.all([
-    supabase.from('feria_productos').select('id, categoria_precio_id, precio_override, productos(id, nombre, imagen_url, stock), categorias_precio(precio)').eq('feria_id', feria.id),
+    supabase.from('feria_productos').select('id, categoria_precio_id, precio_override, productos(id, nombre, descripcion, imagen_url, stock), categorias_precio(precio)').eq('feria_id', feria.id),
     supabase.from('combos').select('*').eq('feria_id', feria.id).eq('activo', true).order('nombre'),
   ]);
 
@@ -202,10 +202,11 @@ function renderGrid(feria, feriaProductos, combos, container) {
       ? `<img src="${p.imagen_url}" alt="${escapeHtml(p.nombre)}" />`
       : '<div class="producto-card__sin-foto">🌸</div>';
     const nombre = `<span class="producto-card__nombre">${escapeHtml(p.nombre)}</span>`;
+    const desc = p.descripcion ? `<span class="producto-card__desc">${escapeHtml(p.descripcion)}</span>` : '';
 
     if (precio == null) {
       card.classList.add('producto-card--sin-precio');
-      card.innerHTML = `${media}${nombre}<span class="producto-card__poner-precio">Tocar para poner precio</span>`;
+      card.innerHTML = `${media}${nombre}${desc}<span class="producto-card__poner-precio">Tocar para poner precio</span>`;
       card.addEventListener('click', async () => {
         const val = await promptDialog(`Precio de "${p.nombre}" en esta feria:`, { placeholder: 'Ej: 100', tipo: 'number', okLabel: 'Poner precio' });
         if (val === null) return; // el usuario canceló
@@ -219,7 +220,7 @@ function renderGrid(feria, feriaProductos, combos, container) {
       return; // continúa el forEach
     }
     card.disabled = disponible <= 0;
-    card.innerHTML = `${media}${nombre}
+    card.innerHTML = `${media}${nombre}${desc}
       <span class="producto-card__precio">${formatMoney(precio)}</span>
       <span class="producto-card__stock ${disponible > 0 ? '' : 'producto-card__stock--agotado'}">${disponible > 0 ? `Quedan ${disponible}` : 'Agotado'}</span>`;
     card.addEventListener('click', () => agregarProductoAlCarrito(p, precio, feria, container));
@@ -637,6 +638,7 @@ async function seleccionarProductosCombo(combo, disponibles) {
           <button type="button" class="combo-picker-item ${seleccion.has(p.id) ? 'selected' : ''}" data-id="${p.id}">
             ${p.imagen_url ? `<img src="${p.imagen_url}" alt="" />` : '<span class="combo-picker-item__sin-foto" aria-hidden="true">🌸</span>'}
             <span class="combo-picker-item__nombre">${escapeHtml(p.nombre)}</span>
+            ${p.descripcion ? `<span class="combo-picker-item__desc">${escapeHtml(p.descripcion)}</span>` : ''}
           </button>
         `).join('')}
       </div>

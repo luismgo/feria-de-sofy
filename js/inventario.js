@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient.js';
-import { confirmDialog, toast, mutar, escapeHtml, formatMoney, uuid, promptDialog, abrirModal, campo, cargando } from './ui.js';
+import { confirmDialog, toast, mutar, escapeHtml, formatMoney, uuid, promptDialog, abrirModal, campo, cargando, comprimirImagen } from './ui.js';
 import { renderInsumosSection, abrirInsumosProducto } from './insumos.js';
 
 export function initInventario(feria) {
@@ -74,6 +74,7 @@ async function render(feria, container) {
       </div>
       <form id="form-producto" class="form-alta hidden">
         ${campo({ label: 'Nombre del producto', input: '<input name="nombre" class="input" placeholder="Ej: Sticker mariposa" required />' })}
+        ${campo({ label: 'Descripción (opcional)', hint: 'Ej: medidas. Útil para distinguir productos con el mismo nombre.', input: '<input name="descripcion" class="input" placeholder="Ej: 5x3cm" />' })}
         ${campo({ label: 'Categoría de precio', hint: 'Podés dejarlo sin categoría y ponerle precio después, desde Vender.', input: `
           <select name="categoria_precio_id" class="input">
             <option value="">Sin categoría</option>
@@ -127,7 +128,7 @@ async function render(feria, container) {
 
   const { data: productos } = await supabase
     .from('feria_productos')
-    .select('id, categoria_precio_id, precio_override, productos(id, nombre, imagen_url, stock, costo)')
+    .select('id, categoria_precio_id, precio_override, productos(id, nombre, descripcion, imagen_url, stock, costo)')
     .eq('feria_id', feria.id);
 
   renderProductos(feria, productos || [], categorias, container);
@@ -144,8 +145,9 @@ async function render(feria, container) {
     let imagen_url = null;
     const file = form.foto.files[0];
     if (file) {
-      const path = `${uuid()}-${file.name}`;
-      const { error: uploadError } = await supabase.storage.from('productos-fotos').upload(path, file);
+      const comprimida = await comprimirImagen(file);
+      const path = `${uuid()}.jpg`;
+      const { error: uploadError } = await supabase.storage.from('productos-fotos').upload(path, comprimida, { contentType: 'image/jpeg' });
       if (!uploadError) {
         imagen_url = supabase.storage.from('productos-fotos').getPublicUrl(path).data.publicUrl;
       } else {
@@ -155,7 +157,7 @@ async function render(feria, container) {
 
     const { data: producto, error: prodError } = await supabase
       .from('productos')
-      .insert({ nombre: form.nombre.value.trim(), stock: Number(form.stock.value), imagen_url })
+      .insert({ nombre: form.nombre.value.trim(), descripcion: form.descripcion.value.trim() || null, stock: Number(form.stock.value), imagen_url })
       .select()
       .single();
 
@@ -252,7 +254,10 @@ function renderProductos(feria, feriaProductos, categorias, container) {
       <div class="inv-producto" data-id="${fp.id}" data-override="${fp.precio_override ?? ''}">
         <div class="inv-producto__head">
           ${p.imagen_url ? `<img class="row__foto" src="${p.imagen_url}" alt="${escapeHtml(p.nombre)}" />` : '<span class="row__foto row__foto--sin" aria-hidden="true">🌸</span>'}
-          <span class="inv-producto__nombre">${escapeHtml(p.nombre)}</span>
+          <span class="inv-producto__nombre-wrap">
+            <span class="inv-producto__nombre">${escapeHtml(p.nombre)}</span>
+            ${p.descripcion ? `<span class="inv-producto__desc">${escapeHtml(p.descripcion)}</span>` : ''}
+          </span>
           ${precioBadge}
         </div>
         <div class="inv-producto__controls">
@@ -268,6 +273,9 @@ function renderProductos(feria, feriaProductos, categorias, container) {
         <div class="inv-producto__acciones">
           <button class="btn-accion" data-action="editar-nombre" data-producto-id="${p.id}" data-producto-nombre="${escapeHtml(p.nombre)}" title="Cambiar el nombre de este producto">
             <svg class="icon" aria-hidden="true"><use href="#i-editar"/></svg> Nombre
+          </button>
+          <button class="btn-accion" data-action="editar-descripcion" data-producto-id="${p.id}" data-producto-descripcion="${escapeHtml(p.descripcion || '')}" title="Descripción corta (ej. medidas) para distinguir productos con el mismo nombre">
+            <svg class="icon" aria-hidden="true"><use href="#i-editar"/></svg> Descripción
           </button>
           <button class="btn-accion" data-action="ver-insumos" data-producto-id="${p.id}" data-producto-nombre="${escapeHtml(p.nombre)}" title="Insumos que este producto descuenta del stock al venderse">
             <svg class="icon" aria-hidden="true"><use href="#i-inventario"/></svg> Insumos
@@ -342,6 +350,19 @@ function renderProductos(feria, feriaProductos, categorias, container) {
     });
   });
 
+  list.querySelectorAll('[data-action="editar-descripcion"]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const actual = btn.dataset.productoDescripcion;
+      const val = await promptDialog('Descripción corta (ej. medidas):', { value: actual, okLabel: 'Guardar' });
+      if (val === null) return; // canceló
+      const descripcion = val.trim() || null;
+      if (descripcion === (actual || null)) return; // sin cambios
+      const { error } = await mutar(supabase.from('productos').update({ descripcion }).eq('id', btn.dataset.productoId), 'No se pudo cambiar la descripción');
+      if (error) return;
+      render(feria, container);
+    });
+  });
+
   list.querySelectorAll('[data-action="ver-insumos"]').forEach((btn) => {
     btn.addEventListener('click', () => {
       abrirInsumosProducto({ id: btn.dataset.productoId, nombre: btn.dataset.productoNombre });
@@ -393,7 +414,7 @@ async function abrirReutilizarModal(feriaActual, categoriasActuales, container) 
 
     const { data: fps } = await supabase
       .from('feria_productos')
-      .select('producto_id, productos(id, nombre, imagen_url, stock)')
+      .select('producto_id, productos(id, nombre, descripcion, imagen_url, stock)')
       .eq('feria_id', feriaId);
 
     const disponibles = (fps || []).filter((fp) => !idsYaVinculados.has(fp.producto_id));
@@ -401,7 +422,10 @@ async function abrirReutilizarModal(feriaActual, categoriasActuales, container) 
     list.innerHTML = disponibles.map((fp) => `
       <div class="row">
         ${fp.productos.imagen_url ? `<img class="row__foto" src="${fp.productos.imagen_url}" alt="" />` : '<span class="row__foto row__foto--sin" aria-hidden="true">🌸</span>'}
-        <span class="row__main">${escapeHtml(fp.productos.nombre)} <span class="row__meta">stock: ${fp.productos.stock}</span></span>
+        <span class="row__main">${escapeHtml(fp.productos.nombre)}
+          ${fp.productos.descripcion ? `<span class="row__meta">${escapeHtml(fp.productos.descripcion)}</span>` : ''}
+          <span class="row__meta">stock: ${fp.productos.stock}</span>
+        </span>
         <button class="btn-accion" data-action="agregar-producto" data-id="${fp.productos.id}" title="Traer este producto a esta feria">
           <svg class="icon" aria-hidden="true"><use href="#i-traer"/></svg> Traer
         </button>

@@ -36,6 +36,8 @@ async function main() {
     const row = sheet.getRow(rowNumber);
     const nombre = row.getCell(3).value; // columna C: Nombre
     const cantidad = row.getCell(4).value; // columna D: Cantidad
+    const descripcionCell = row.getCell(5).value; // columna E: Descripción (medidas)
+    const descripcion = descripcionCell != null ? String(descripcionCell).trim() : null;
 
     if (!nombre) continue;
 
@@ -61,7 +63,7 @@ async function main() {
 
     const { data: producto, error: insertError } = await supabase
       .from('productos')
-      .insert({ nombre: String(nombre).trim(), stock: Number(cantidad) || 0, imagen_url: imagenUrl })
+      .insert({ nombre: String(nombre).trim(), descripcion, stock: Number(cantidad) || 0, imagen_url: imagenUrl })
       .select()
       .single();
 

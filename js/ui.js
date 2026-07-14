@@ -196,6 +196,25 @@ export function formatMoney(n) {
   return '$' + Number(n || 0).toLocaleString('es-CO');
 }
 
+// Comprimir una foto antes de subirla: las que llegan del celular o de un excel
+// importado pesan 500KB-1MB para mostrarse en miniaturas de 40-90px, lo que atrasa
+// el render de la grilla. Redimensiona al lado mayor y reencoda a JPEG.
+export async function comprimirImagen(file, { maxDim = 800, calidad = 0.8 } = {}) {
+  const bitmap = await createImageBitmap(file);
+  const escala = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
+  const w = Math.round(bitmap.width * escala);
+  const h = Math.round(bitmap.height * escala);
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff'; // PNG con transparencia no se vuelve negro al pasar a JPEG
+  ctx.fillRect(0, 0, w, h);
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', calidad));
+  return blob || file; // si el navegador no puede generar el blob, se sube la foto original
+}
+
 // UUID con fallback: crypto.randomUUID sólo existe en contexto seguro (https/localhost);
 // servida por IP en la LAN (http plano) tiraría excepción, así que caemos a un generador propio.
 export function uuid() {
