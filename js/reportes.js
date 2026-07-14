@@ -72,7 +72,7 @@ async function render(feria, container) {
 function renderCierre(ventas, anuladasHoy, el) {
   const hoy = new Date().toLocaleDateString('en-CA'); // fecha LOCAL, no UTC (si no, la caja de una feria nocturna no cuadra)
   const ventasHoy = ventas.filter((v) => new Date(v.created_at).toLocaleDateString('en-CA') === hoy);
-  const por = { efectivo: 0, transferencia: 0, otro: 0 };
+  const por = { efectivo: 0, transferencia: 0 };
   ventasHoy.forEach((v) => { por[v.metodo_pago] = (por[v.metodo_pago] || 0) + Number(v.total); });
 
   el.innerHTML = `
@@ -87,7 +87,6 @@ function renderCierre(ventas, anuladasHoy, el) {
     </div>
     <div class="stats-grid">
       <div class="stat"><p class="stat__label">📲 Transferencias</p><p class="stat__valor monto">${formatMoney(por.transferencia)}</p></div>
-      <div class="stat"><p class="stat__label">🔵 Otro (QR)</p><p class="stat__valor monto">${formatMoney(por.otro)}</p></div>
       <div class="stat"><p class="stat__label">Ventas del día</p><p class="stat__valor">${ventasHoy.length}</p></div>
       <div class="stat"><p class="stat__label">Anuladas hoy</p><p class="stat__valor">${anuladasHoy}</p></div>
     </div>
@@ -140,7 +139,7 @@ function renderPorFecha(feria, containerRaiz, ventas, items, el) {
   el.innerHTML = fechas.map((fecha) => {
     const ventasDia = porFecha[fecha];
     const totalDia = ventasDia.reduce((s, v) => s + Number(v.total), 0);
-    const porMetodo = { efectivo: 0, transferencia: 0, otro: 0 };
+    const porMetodo = { efectivo: 0, transferencia: 0 };
     ventasDia.forEach((v) => { porMetodo[v.metodo_pago] = (porMetodo[v.metodo_pago] || 0) + Number(v.total); });
     const esHoy = fecha === hoy;
     const filas = ventasDia.map((v) => {
@@ -159,7 +158,7 @@ function renderPorFecha(feria, containerRaiz, ventas, items, el) {
         <span class="historial-dia__meta">${plural(ventasDia.length, 'venta', 'ventas')}</span>
         <strong class="monto historial-dia__total">${formatMoney(totalDia)}</strong>
       </summary>
-      <div class="dia-metodos">💵 ${formatMoney(porMetodo.efectivo)} · 📲 ${formatMoney(porMetodo.transferencia)} · 🔵 ${formatMoney(porMetodo.otro)}</div>
+      <div class="dia-metodos">💵 ${formatMoney(porMetodo.efectivo)} · 📲 ${formatMoney(porMetodo.transferencia)}</div>
       ${filas}
     </details>`;
   }).join('') || '<p class="list-empty">Todavía no hay ventas</p>';

@@ -146,7 +146,7 @@ button {
   border: 1.5px solid var(--accent);
   box-shadow: none;
 }
-.btn--danger, .btn--peligro { background: var(--danger); color: #fff; }
+.btn--danger { background: var(--danger); color: #fff; }
 .btn--quiet { background: none; box-shadow: none; color: var(--accent-strong); }
 .btn--block { width: 100%; }
 
@@ -258,22 +258,6 @@ button:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }
   .spinner { animation: girar 0.8s linear infinite; }
 }
 @keyframes girar { to { transform: rotate(1turn); } }
-
-/* ============ Badges ============ */
-
-.badge {
-  display: inline-flex; align-items: center;
-  padding: 4px 12px;
-  border-radius: var(--r-full);
-  font-weight: 700;
-  font-size: var(--fs-footnote);
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-.badge--accent { background: var(--accent-tint); color: var(--accent-strong); }
-.badge--neutral { background: var(--surface-2); color: var(--ink-2); font-weight: 600; }
-.badge--success { background: var(--success-soft); color: var(--success); }
-.badge--danger { background: var(--danger-soft); color: var(--danger); }
 
 /* ============ Segmented control ============ */
 
@@ -471,13 +455,13 @@ button:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }
   background: var(--border);
   margin: 4px auto 10px;
 }
-.sheet__head, .carrito-sheet__head {
+.sheet__head {
   flex: none;
   display: flex; align-items: center; justify-content: space-between;
   gap: var(--sp-2);
   margin-bottom: var(--sp-2);
 }
-.sheet__head h3, .carrito-sheet__head h3 { margin: 0; }
+.sheet__head h3 { margin: 0; }
 .sheet__body {
   flex: 1 1 auto; min-height: 0;
   overflow-y: auto;
@@ -538,7 +522,7 @@ button:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* ============ Login ============ */
 
-.pin-card {
+.login-card {
   background: var(--surface);
   border-radius: var(--r-xl);
   padding: var(--sp-6);
@@ -547,8 +531,8 @@ button:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }
   margin: 40px auto;
   box-shadow: var(--shadow-1);
 }
-.pin-card form { display: flex; flex-direction: column; gap: 10px; margin-top: var(--sp-4); }
-.pin-card .field { text-align: left; }
+.login-card form { display: flex; flex-direction: column; gap: 10px; margin-top: var(--sp-4); }
+.login-card .field { text-align: left; }
 
 .login-msg {
   border-radius: var(--r-md);
@@ -888,7 +872,7 @@ button:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
 @media (prefers-reduced-motion: no-preference) {
   .btn, .btn-accion, .producto-card, .feria-card, .combo-btn,
-  .segmented__item, .stepper__btn, .pago-btn {
+  .segmented__item, .stepper__btn {
     transition: transform 0.12s ease, background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
   }
   .btn:active:not(:disabled), .btn-accion:active,
