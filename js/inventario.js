@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient.js';
-import { confirmDialog, toast, mutar, escapeHtml, formatMoney, uuid, promptDialog, abrirModal, campo, cargando, comprimirImagen } from './ui.js';
+import { confirmDialog, toast, mutar, escapeHtml, formatMoney, uuid, promptDialog, abrirModal, campo, cargando, comprimirImagen, filtrarPorNombre, ordenar } from './ui.js';
 import { renderInsumosSection, abrirInsumosProducto } from './insumos.js';
 
 let vista = 'menu'; // 'menu' | 'categorias' | 'combos' | 'productos' | 'insumos' — se resetea al entrar a la pestaña
@@ -104,31 +104,83 @@ async function renderSubvista(feria, container) {
 async function renderCategoriasVista(feria, container) {
   const body = container.querySelector('.inv-subview__body');
   body.innerHTML = cargando('Cargando categorías...', { kind: 'lista' });
-  const { data: categorias, error } = await supabase.from('categorias_precio').select('*').eq('feria_id', feria.id).order('orden');
+  const { data, error } = await supabase.from('categorias_precio').select('*').eq('feria_id', feria.id).order('orden');
   if (error) {
     body.innerHTML = '<p class="error">No se pudo cargar — revisá la conexión</p>';
     return;
   }
+  let categorias = data;
+  let filtro = '';
+  let orden = 'nombre';
+
   body.innerHTML = `
     <section class="card">
       <h2>Categorías de precio</h2>
       <p class="card__hint">Agrupá productos por precio: todos los de una categoría valen lo mismo (ej: "Chico" = $100). Así cambiás un precio en un solo lugar.</p>
+      <div class="inv-toolbar">
+        <input type="search" class="input inv-buscador" placeholder="Buscar categoría..." aria-label="Buscar categoría" />
+        <select class="input inv-orden-select" aria-label="Ordenar por">
+          <option value="nombre">Nombre (A-Z)</option>
+          <option value="precio">Precio</option>
+        </select>
+        <button type="button" class="btn-accion" data-action="abrir-alta-categoria">
+          <svg class="icon" aria-hidden="true"><use href="#i-mas"/></svg> Agregar
+        </button>
+      </div>
       <div id="inv-categorias" class="inv-list"></div>
-      <button type="button" class="btn-accion" data-toggle-categoria>
-        <svg class="icon" aria-hidden="true"><use href="#i-mas"/></svg> Agregar categoría
-      </button>
-      <form id="form-categoria" class="form-alta hidden">
-        ${campo({ label: 'Nombre', input: '<input name="nombre" class="input" placeholder="Ej: Chico" required />' })}
-        ${campo({ label: 'Precio en pesos', input: '<input name="precio" class="input" type="number" step="1" min="0" inputmode="numeric" placeholder="Ej: 5000" required />' })}
-        <button type="submit" class="btn btn--primary">Guardar categoría</button>
-      </form>
     </section>
   `;
 
-  bindToggleForm(container, '[data-toggle-categoria]', '#form-categoria');
-  renderCategorias(feria, categorias, container);
+  const CRITERIOS = { precio: (c) => c.precio };
 
-  container.querySelector('#form-categoria').addEventListener('submit', async (e) => {
+  function actualizarLista() {
+    const filtradas = filtrarPorNombre(categorias, filtro, (c) => c.nombre);
+    const ordenadas = ordenar(filtradas, orden, CRITERIOS, (c) => c.nombre);
+    renderCategorias(ordenadas, categorias.length > 0, container, refrescar);
+  }
+
+  async function refrescar() {
+    const { data: nuevas } = await supabase.from('categorias_precio').select('*').eq('feria_id', feria.id).order('orden');
+    categorias = nuevas || [];
+    actualizarLista();
+  }
+
+  body.querySelector('.inv-buscador').addEventListener('input', (e) => {
+    filtro = e.target.value;
+    actualizarLista();
+  });
+  body.querySelector('.inv-orden-select').addEventListener('change', (e) => {
+    orden = e.target.value;
+    actualizarLista();
+  });
+  body.querySelector('[data-action="abrir-alta-categoria"]').addEventListener('click', () => {
+    abrirAltaCategoriaModal(feria, categorias, refrescar);
+  });
+
+  actualizarLista();
+}
+
+// Modal de alta de categoría — reemplaza al viejo formulario inline colapsado.
+function abrirAltaCategoriaModal(feria, categoriasActuales, refrescar) {
+  const { dialogo, cerrar } = abrirModal({
+    titulo: 'Agregar categoría',
+    contenidoHTML: `
+      <form id="form-categoria" class="form-alta">
+        ${campo({ label: 'Nombre', input: '<input name="nombre" class="input" placeholder="Ej: Chico" required autofocus />' })}
+        ${campo({ label: 'Precio en pesos', input: '<input name="precio" class="input" type="number" step="1" min="0" inputmode="numeric" placeholder="Ej: 5000" required />' })}
+        <div class="modal-actions">
+          <button type="button" class="btn btn--secondary" data-action="cerrar">Cancelar</button>
+          <button type="submit" class="btn btn--primary">Guardar categoría</button>
+        </div>
+      </form>
+    `,
+  });
+
+  dialogo.addEventListener('click', (e) => {
+    if (e.target.closest('[data-action="cerrar"]')) cerrar(null);
+  });
+
+  dialogo.querySelector('#form-categoria').addEventListener('submit', async (e) => {
     e.preventDefault();
     const form = e.target;
     const submitBtn = form.querySelector('button[type="submit"]');
@@ -137,10 +189,11 @@ async function renderCategoriasVista(feria, container) {
       feria_id: feria.id,
       nombre: form.nombre.value.trim(),
       precio: Number(form.precio.value),
-      orden: categorias.length,
+      orden: categoriasActuales.length,
     }), 'No se pudo crear la categoría');
     if (insertError) { submitBtn.disabled = false; return; }
-    render(feria, container);
+    cerrar(true);
+    refrescar();
   });
 }
 
@@ -291,23 +344,56 @@ async function renderProductosVista(feria, container) {
   container.querySelector('#btn-reutilizar').addEventListener('click', () => abrirReutilizarModal(feria, categorias, container));
 }
 
-function renderCategorias(feria, categorias, container) {
+function renderCategorias(categoriasAMostrar, hayCategorias, container, refrescar) {
   const list = container.querySelector('#inv-categorias');
-  list.innerHTML = categorias.map((c) => `
+  list.innerHTML = categoriasAMostrar.map((c) => `
     <div class="row" data-id="${c.id}">
-      <span>${escapeHtml(c.nombre)} — <span class="monto">${formatMoney(c.precio)}</span></span>
-      <button class="btn-accion btn-accion--peligro" data-action="eliminar-categoria" data-id="${c.id}" title="Eliminar esta categoría de precio">
-        <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg> Eliminar
-      </button>
+      <span class="row__nombre">${escapeHtml(c.nombre)}</span>
+      <label class="inv-mini-label">Precio $<input type="number" class="cat-precio-input" data-id="${c.id}" value="${c.precio}" min="0" step="1" /></label>
+      <div class="row__actions">
+        <button class="btn-accion" data-action="editar-nombre-categoria" data-id="${c.id}" data-nombre="${escapeHtml(c.nombre)}" title="Cambiar el nombre de esta categoría">
+          <svg class="icon" aria-hidden="true"><use href="#i-editar"/></svg> Nombre
+        </button>
+        <button class="btn-accion btn-accion--peligro" data-action="eliminar-categoria" data-id="${c.id}" title="Eliminar esta categoría de precio">
+          <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg> Eliminar
+        </button>
+      </div>
     </div>
-  `).join('') || '<p class="list-empty">Todavía no hay categorías de precio</p>';
+  `).join('') || (hayCategorias ? '<p class="list-empty">No se encontraron categorías con ese nombre</p>' : '<p class="list-empty">Todavía no hay categorías de precio</p>');
+
+  list.querySelectorAll('.cat-precio-input').forEach((input) => {
+    input.addEventListener('change', async () => {
+      const val = Number(input.value);
+      if (input.value === '' || !Number.isFinite(val) || val < 0) {
+        toast('Poné un precio válido (0 o más).');
+        input.value = input.defaultValue;
+        return;
+      }
+      const { error } = await mutar(supabase.from('categorias_precio').update({ precio: val }).eq('id', input.dataset.id), 'No se pudo actualizar el precio');
+      if (!error) input.defaultValue = String(val);
+    });
+  });
+
+  list.querySelectorAll('[data-action="editar-nombre-categoria"]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const actual = btn.dataset.nombre;
+      const val = await promptDialog('Nuevo nombre de la categoría:', { value: actual, okLabel: 'Guardar' });
+      if (val === null) return; // canceló
+      const nombre = val.trim();
+      if (!nombre) { toast('El nombre no puede quedar vacío.'); return; }
+      if (nombre === actual) return; // sin cambios
+      const { error } = await mutar(supabase.from('categorias_precio').update({ nombre }).eq('id', btn.dataset.id), 'No se pudo cambiar el nombre');
+      if (error) return;
+      refrescar();
+    });
+  });
 
   list.querySelectorAll('[data-action="eliminar-categoria"]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const ok = await confirmDialog('¿Eliminar esta categoría de precio? Los productos que la usan quedarán sin categoría.', { peligro: true });
       if (!ok) return;
       await supabase.from('categorias_precio').delete().eq('id', btn.dataset.id);
-      render(feria, container);
+      refrescar();
     });
   });
 }

@@ -927,6 +927,13 @@ button:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 /* ============ Inventario ============ */
 
 .inv-list { display: flex; flex-direction: column; }
+
+/* Barra de herramientas de una sección de Inventario: buscador + orden + botón Agregar.
+   Vive arriba de la lista (antes al final, colapsado); en pantallas angostas envuelve. */
+.inv-toolbar { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; margin-bottom: var(--sp-3); }
+.inv-toolbar .inv-buscador { flex: 1; min-width: 140px; }
+.inv-toolbar .inv-orden-select { flex: none; width: auto; min-width: 140px; }
+
 .inv-mini-label {
   display: inline-flex; align-items: center; gap: 6px;
   font-size: var(--fs-caption); font-weight: 600; color: var(--ink-2);
