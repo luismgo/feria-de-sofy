@@ -275,7 +275,7 @@ export function ordenar(items, criterio, criterios, getNombre) {
   return [...items].sort((a, b) => {
     if (extraer) {
       const diff = extraer(a) - extraer(b);
-      if (diff !== 0) return diff;
+      if (diff !== 0 && !Number.isNaN(diff)) return diff;
     }
     return collatorEs.compare(getNombre(a), getNombre(b));
   });
