@@ -204,32 +204,89 @@ function abrirAltaCategoriaModal(feria, categoriasActuales, refrescar) {
 async function renderCombosVista(feria, container) {
   const body = container.querySelector('.inv-subview__body');
   body.innerHTML = cargando('Cargando combos...', { kind: 'lista' });
-  const { data: combos, error } = await supabase.from('combos').select('*').eq('feria_id', feria.id).order('nombre');
+  const { data, error } = await supabase.from('combos').select('*').eq('feria_id', feria.id).order('nombre');
   if (error) {
     body.innerHTML = '<p class="error">No se pudo cargar — revisá la conexión</p>';
     return;
   }
+  let combos = data;
+  let filtro = '';
+  let orden = 'nombre';
+
   body.innerHTML = `
     <section class="card">
       <h2>Combos</h2>
       <p class="card__hint">Un combo vende varios productos juntos a un precio especial (ej: "3 stickers por $250"). Al vender elegís qué productos entran.</p>
+      <div class="inv-toolbar">
+        <input type="search" class="input inv-buscador" placeholder="Buscar combo..." aria-label="Buscar combo" />
+        <select class="input inv-orden-select" aria-label="Ordenar por">
+          <option value="nombre">Nombre (A-Z)</option>
+          <option value="precio">Precio</option>
+          <option value="cantidad">Cantidad</option>
+        </select>
+        <button type="button" class="btn-accion" data-action="abrir-alta-combo">
+          <svg class="icon" aria-hidden="true"><use href="#i-mas"/></svg> Agregar
+        </button>
+      </div>
       <div id="inv-combos" class="inv-list"></div>
-      <button type="button" class="btn-accion" data-toggle-combo>
-        <svg class="icon" aria-hidden="true"><use href="#i-mas"/></svg> Agregar combo
-      </button>
-      <form id="form-combo" class="form-alta hidden">
-        ${campo({ label: 'Nombre', input: '<input name="nombre" class="input" placeholder="Ej: Combo 3 stickers" required />' })}
-        ${campo({ label: 'Cantidad de productos que incluye', input: '<input name="cantidad" class="input" type="number" min="1" inputmode="numeric" placeholder="Ej: 3" required />' })}
-        ${campo({ label: 'Precio del combo en pesos', input: '<input name="precio" class="input" type="number" step="1" min="0" inputmode="numeric" placeholder="Ej: 12000" required />' })}
-        <button type="submit" class="btn btn--primary">Guardar combo</button>
-      </form>
     </section>
   `;
 
-  bindToggleForm(container, '[data-toggle-combo]', '#form-combo');
-  renderCombos(feria, combos, container);
+  const CRITERIOS = { precio: (c) => c.precio, cantidad: (c) => c.cantidad };
 
-  container.querySelector('#form-combo').addEventListener('submit', async (e) => {
+  function actualizarLista() {
+    const filtrados = filtrarPorNombre(combos, filtro, (c) => c.nombre);
+    const ordenados = ordenar(filtrados, orden, CRITERIOS, (c) => c.nombre);
+    renderCombos(ordenados, combos.length > 0, container, refrescar, combos);
+  }
+
+  async function refrescar() {
+    const { data: nuevos, error: refrescarError } = await supabase.from('combos').select('*').eq('feria_id', feria.id).order('nombre');
+    if (refrescarError) {
+      toast('No se pudo actualizar la lista — revisá la conexión', { tipo: 'error' });
+      return;
+    }
+    combos = nuevos || [];
+    actualizarLista();
+  }
+
+  body.querySelector('.inv-buscador').addEventListener('input', (e) => {
+    filtro = e.target.value;
+    actualizarLista();
+  });
+  body.querySelector('.inv-orden-select').addEventListener('change', (e) => {
+    orden = e.target.value;
+    actualizarLista();
+  });
+  body.querySelector('[data-action="abrir-alta-combo"]').addEventListener('click', () => {
+    abrirAltaComboModal(feria, refrescar);
+  });
+
+  actualizarLista();
+}
+
+// Modal de alta de combo — reemplaza al viejo formulario inline colapsado.
+function abrirAltaComboModal(feria, refrescar) {
+  const { dialogo, cerrar } = abrirModal({
+    titulo: 'Agregar combo',
+    contenidoHTML: `
+      <form id="form-combo" class="form-alta">
+        ${campo({ label: 'Nombre', input: '<input name="nombre" class="input" placeholder="Ej: Combo 3 stickers" required autofocus />' })}
+        ${campo({ label: 'Cantidad de productos que incluye', input: '<input name="cantidad" class="input" type="number" min="1" inputmode="numeric" placeholder="Ej: 3" required />' })}
+        ${campo({ label: 'Precio del combo en pesos', input: '<input name="precio" class="input" type="number" step="1" min="0" inputmode="numeric" placeholder="Ej: 12000" required />' })}
+        <div class="modal-actions">
+          <button type="button" class="btn btn--secondary" data-action="cerrar">Cancelar</button>
+          <button type="submit" class="btn btn--primary">Guardar combo</button>
+        </div>
+      </form>
+    `,
+  });
+
+  dialogo.addEventListener('click', (e) => {
+    if (e.target.closest('[data-action="cerrar"]')) cerrar(null);
+  });
+
+  dialogo.querySelector('#form-combo').addEventListener('submit', async (e) => {
     e.preventDefault();
     const form = e.target;
     const submitBtn = form.querySelector('button[type="submit"]');
@@ -241,7 +298,8 @@ async function renderCombosVista(feria, container) {
       precio: Number(form.precio.value),
     }), 'No se pudo crear el combo');
     if (insertError) { submitBtn.disabled = false; return; }
-    render(feria, container);
+    cerrar(true);
+    refrescar();
   });
 }
 
@@ -406,12 +464,17 @@ function renderCategorias(categoriasAMostrar, hayCategorias, container, refresca
   });
 }
 
-function renderCombos(feria, combos, container) {
+function renderCombos(combosAMostrar, hayCombos, container, refrescar, combos) {
   const list = container.querySelector('#inv-combos');
-  list.innerHTML = combos.map((c) => `
+  list.innerHTML = combosAMostrar.map((c) => `
     <div class="row" data-id="${c.id}">
-      <span>${escapeHtml(c.nombre)} — ${c.cantidad} productos por <span class="monto">${formatMoney(c.precio)}</span>${c.activo ? '' : ' (en pausa)'}</span>
+      <span class="row__nombre">${escapeHtml(c.nombre)}${c.activo ? '' : ' (en pausa)'}</span>
+      <label class="inv-mini-label">Cantidad <input type="number" class="combo-cantidad-input" data-id="${c.id}" value="${c.cantidad}" min="1" /></label>
+      <label class="inv-mini-label">Precio $<input type="number" class="combo-precio-input" data-id="${c.id}" value="${c.precio}" min="0" step="1" /></label>
       <div class="row__actions">
+        <button class="btn-accion" data-action="editar-nombre-combo" data-id="${c.id}" data-nombre="${escapeHtml(c.nombre)}" title="Cambiar el nombre de este combo">
+          <svg class="icon" aria-hidden="true"><use href="#i-editar"/></svg> Nombre
+        </button>
         <button class="btn-accion" data-action="toggle-combo" data-id="${c.id}" data-activo="${c.activo}" title="${c.activo ? 'Deja de aparecer al vender' : 'Vuelve a aparecer al vender'}">
           <svg class="icon" aria-hidden="true"><use href="#i-${c.activo ? 'pausa' : 'play'}"/></svg> ${c.activo ? 'Pausar' : 'Activar'}
         </button>
@@ -420,12 +483,60 @@ function renderCombos(feria, combos, container) {
         </button>
       </div>
     </div>
-  `).join('') || '<p class="list-empty">Todavía no hay combos</p>';
+  `).join('') || (hayCombos ? '<p class="list-empty">No se encontraron combos con ese nombre</p>' : '<p class="list-empty">Todavía no hay combos</p>');
+
+  list.querySelectorAll('.combo-cantidad-input').forEach((input) => {
+    input.addEventListener('change', async () => {
+      const val = Number(input.value);
+      if (input.value === '' || !Number.isInteger(val) || val < 1) {
+        toast('Poné una cantidad válida (1 o más).');
+        input.value = input.defaultValue;
+        return;
+      }
+      const { error } = await mutar(supabase.from('combos').update({ cantidad: val }).eq('id', input.dataset.id), 'No se pudo actualizar la cantidad');
+      if (!error) {
+        input.defaultValue = String(val);
+        const item = combos.find((c) => c.id === input.dataset.id);
+        if (item) item.cantidad = val;
+      }
+    });
+  });
+
+  list.querySelectorAll('.combo-precio-input').forEach((input) => {
+    input.addEventListener('change', async () => {
+      const val = Number(input.value);
+      if (input.value === '' || !Number.isFinite(val) || val < 0) {
+        toast('Poné un precio válido (0 o más).');
+        input.value = input.defaultValue;
+        return;
+      }
+      const { error } = await mutar(supabase.from('combos').update({ precio: val }).eq('id', input.dataset.id), 'No se pudo actualizar el precio');
+      if (!error) {
+        input.defaultValue = String(val);
+        const item = combos.find((c) => c.id === input.dataset.id);
+        if (item) item.precio = val;
+      }
+    });
+  });
+
+  list.querySelectorAll('[data-action="editar-nombre-combo"]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const actual = btn.dataset.nombre;
+      const val = await promptDialog('Nuevo nombre del combo:', { value: actual, okLabel: 'Guardar' });
+      if (val === null) return; // canceló
+      const nombre = val.trim();
+      if (!nombre) { toast('El nombre no puede quedar vacío.'); return; }
+      if (nombre === actual) return; // sin cambios
+      const { error } = await mutar(supabase.from('combos').update({ nombre }).eq('id', btn.dataset.id), 'No se pudo cambiar el nombre');
+      if (error) return;
+      refrescar();
+    });
+  });
 
   list.querySelectorAll('[data-action="toggle-combo"]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       await supabase.from('combos').update({ activo: btn.dataset.activo !== 'true' }).eq('id', btn.dataset.id);
-      render(feria, container);
+      refrescar();
     });
   });
 
@@ -434,7 +545,7 @@ function renderCombos(feria, combos, container) {
       const ok = await confirmDialog('¿Eliminar este combo?', { peligro: true });
       if (!ok) return;
       await supabase.from('combos').delete().eq('id', btn.dataset.id);
-      render(feria, container);
+      refrescar();
     });
   });
 }
