@@ -136,11 +136,15 @@ async function renderCategoriasVista(feria, container) {
   function actualizarLista() {
     const filtradas = filtrarPorNombre(categorias, filtro, (c) => c.nombre);
     const ordenadas = ordenar(filtradas, orden, CRITERIOS, (c) => c.nombre);
-    renderCategorias(ordenadas, categorias.length > 0, container, refrescar);
+    renderCategorias(ordenadas, categorias.length > 0, container, refrescar, categorias);
   }
 
   async function refrescar() {
-    const { data: nuevas } = await supabase.from('categorias_precio').select('*').eq('feria_id', feria.id).order('orden');
+    const { data: nuevas, error } = await supabase.from('categorias_precio').select('*').eq('feria_id', feria.id).order('orden');
+    if (error) {
+      toast('No se pudo actualizar la lista — revisá la conexión', { tipo: 'error' });
+      return;
+    }
     categorias = nuevas || [];
     actualizarLista();
   }
@@ -344,7 +348,7 @@ async function renderProductosVista(feria, container) {
   container.querySelector('#btn-reutilizar').addEventListener('click', () => abrirReutilizarModal(feria, categorias, container));
 }
 
-function renderCategorias(categoriasAMostrar, hayCategorias, container, refrescar) {
+function renderCategorias(categoriasAMostrar, hayCategorias, container, refrescar, categorias) {
   const list = container.querySelector('#inv-categorias');
   list.innerHTML = categoriasAMostrar.map((c) => `
     <div class="row" data-id="${c.id}">
@@ -370,7 +374,11 @@ function renderCategorias(categoriasAMostrar, hayCategorias, container, refresca
         return;
       }
       const { error } = await mutar(supabase.from('categorias_precio').update({ precio: val }).eq('id', input.dataset.id), 'No se pudo actualizar el precio');
-      if (!error) input.defaultValue = String(val);
+      if (!error) {
+        input.defaultValue = String(val);
+        const item = categorias.find((c) => c.id === input.dataset.id);
+        if (item) item.precio = val;
+      }
     });
   });
 
