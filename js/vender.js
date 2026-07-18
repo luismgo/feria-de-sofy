@@ -245,17 +245,11 @@ function renderGrid(feria, feriaProductos, combos, container) {
     const desc = p.descripcion ? `<span class="producto-card__desc">${escapeHtml(p.descripcion)}</span>` : '';
 
     if (precio == null) {
+      // Asignar precio ya no pasa por acá (ver Inventario > Productos > Precio individual):
+      // la tarjeta queda deshabilitada con un aviso, en vez de abrir un prompt de precio.
       card.classList.add('producto-card--sin-precio');
-      card.innerHTML = `${media}${nombre}${desc}<span class="producto-card__poner-precio">Tocar para poner precio</span>`;
-      card.addEventListener('click', async () => {
-        const val = await promptDialog(`Precio de "${p.nombre}" en esta feria:`, { placeholder: 'Ej: 100', tipo: 'number', okLabel: 'Poner precio' });
-        if (val === null) return; // el usuario canceló
-        const precioNuevo = Number(val);
-        if (!Number.isFinite(precioNuevo) || precioNuevo <= 0) { toast('Poné un precio válido mayor a 0.'); return; }
-        const { error } = await supabase.from('feria_productos').update({ precio_override: precioNuevo }).eq('id', fp.id);
-        if (error) { toast('No se pudo guardar el precio. Probá de nuevo.'); return; }
-        loadAndRender(feria, container);
-      });
+      card.disabled = true;
+      card.innerHTML = `${media}${nombre}${desc}<span class="producto-card__poner-precio">Sin precio — asignalo en Inventario</span>`;
       grid.appendChild(card);
       return; // continúa el forEach
     }
