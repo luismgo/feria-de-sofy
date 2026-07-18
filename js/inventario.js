@@ -367,6 +367,7 @@ function filaProducto(fp, categorias) {
       <div class="inv-producto__controls">
         <label class="inv-mini-label">Stock <input type="number" class="inv-stock-input" data-producto-id="${p.id}" value="${p.stock}" min="0" /></label>
         <label class="inv-mini-label">Costo $ <input type="number" class="inv-costo-input" data-producto-id="${p.id}" value="${p.costo ?? 0}" min="0" step="1" /></label>
+        <label class="inv-mini-label inv-precio-individual${fp.categoria_precio_id ? ' hidden' : ''}">Precio individual $ <input type="number" class="inv-precio-input" data-id="${fp.id}" value="${fp.precio_override ?? ''}" min="0" step="1" /></label>
         <label class="inv-mini-label">Categoría
           <select class="inv-categoria-select" data-id="${fp.id}">
             ${categorias.map((c) => `<option value="${c.id}" ${fp.categoria_precio_id === c.id ? 'selected' : ''}>${escapeHtml(c.nombre)} — ${formatMoney(c.precio)}</option>`).join('')}
@@ -448,6 +449,37 @@ function renderProductos(feria, feriaProductos, categorias, container) {
     });
   });
 
+  list.querySelectorAll('.inv-precio-input').forEach((input) => {
+    input.addEventListener('change', async () => {
+      const raw = input.value.trim();
+      const fila = input.closest('.inv-producto');
+      const badge = fila?.querySelector('.inv-producto__precio');
+
+      if (raw === '') {
+        // Vacío es válido acá (a diferencia de Stock/Costo): vuelve a "Sin precio"
+        // hasta que se cargue un valor o se asigne una categoría.
+        const { error } = await mutar(supabase.from('feria_productos').update({ precio_override: null }).eq('id', input.dataset.id), 'No se pudo actualizar el precio individual');
+        if (error) { input.value = input.defaultValue; return; }
+        input.defaultValue = '';
+        if (fila) fila.dataset.override = '';
+        if (badge) { badge.textContent = 'Sin precio'; badge.classList.add('inv-producto__precio--sin'); }
+        return;
+      }
+
+      const val = Number(raw);
+      if (!Number.isFinite(val) || val < 0) {
+        toast('Poné un precio individual válido (0 o más).');
+        input.value = input.defaultValue;
+        return;
+      }
+      const { error } = await mutar(supabase.from('feria_productos').update({ precio_override: val }).eq('id', input.dataset.id), 'No se pudo actualizar el precio individual');
+      if (error) { input.value = input.defaultValue; return; }
+      input.defaultValue = String(val);
+      if (fila) fila.dataset.override = String(val);
+      if (badge) { badge.textContent = formatMoney(val); badge.classList.remove('inv-producto__precio--sin'); }
+    });
+  });
+
   list.querySelectorAll('.inv-categoria-select').forEach((select) => {
     select.addEventListener('change', async () => {
       const { error } = await mutar(supabase.from('feria_productos').update({ categoria_precio_id: select.value || null }).eq('id', select.dataset.id), 'No se pudo actualizar la categoría');
@@ -462,6 +494,9 @@ function renderProductos(feria, feriaProductos, categorias, container) {
         badge.textContent = efectivo != null ? formatMoney(efectivo) : 'Sin precio';
         badge.classList.toggle('inv-producto__precio--sin', efectivo == null);
       }
+      // El campo "Precio individual" sólo tiene sentido en "Sin categoría".
+      const precioIndividual = fila?.querySelector('.inv-precio-individual');
+      if (precioIndividual) precioIndividual.classList.toggle('hidden', !!select.value);
     });
   });
 
