@@ -255,6 +255,32 @@ export function formatMoney(n) {
   return '$' + Number(n || 0).toLocaleString('es-CO');
 }
 
+// Filtra por substring de nombre, case-insensitive. Query vacío (o solo espacios) devuelve
+// todo sin tocar el array. Usado por los buscadores de Inventario (Categorías, Combos,
+// Productos, Insumos) para filtrar en memoria, sin re-fetch.
+export function filtrarPorNombre(items, query, getNombre) {
+  const q = query.trim().toLowerCase();
+  if (!q) return items;
+  return items.filter((item) => getNombre(item).toLowerCase().includes(q));
+}
+
+const collatorEs = new Intl.Collator('es');
+
+// Ordena por el criterio elegido en un <select> de orden. `criterios` mapea el value del
+// select a una función que extrae el valor numérico a comparar; un criterio sin entrada en
+// `criterios` (ej. 'nombre') deja el orden puramente alfabético. Todo criterio no alfabético
+// usa el nombre como desempate, para que el resultado sea estable ante empates numéricos.
+export function ordenar(items, criterio, criterios, getNombre) {
+  const extraer = criterios[criterio];
+  return [...items].sort((a, b) => {
+    if (extraer) {
+      const diff = extraer(a) - extraer(b);
+      if (diff !== 0) return diff;
+    }
+    return collatorEs.compare(getNombre(a), getNombre(b));
+  });
+}
+
 // Comprimir una foto antes de subirla: las que llegan del celular o de un excel
 // importado pesan 500KB-1MB para mostrarse en miniaturas de 40-90px, lo que atrasa
 // el render de la grilla. Redimensiona al lado mayor y reencoda a JPEG.
