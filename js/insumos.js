@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient.js';
-import { confirmDialog, mutar, toast, escapeHtml, abrirModal, campo } from './ui.js';
+import { confirmDialog, mutar, toast, escapeHtml, abrirModal, campo, promptDialog, filtrarPorNombre, ordenar } from './ui.js';
 
 export async function fetchInsumos() {
   const { data } = await supabase.from('insumos').select('*').order('nombre');
@@ -7,41 +7,70 @@ export async function fetchInsumos() {
 }
 
 export async function renderInsumosSection(container) {
-  const insumos = await fetchInsumos();
+  let insumos = await fetchInsumos();
+  let filtro = '';
+  let orden = 'nombre';
 
   container.innerHTML = `
     <h2>Insumos</h2>
     <p class="card__hint">Empaques y materiales que se descuentan solos al vender, sin venderse ellos mismos (ej. bolsitas).</p>
+    <div class="inv-toolbar">
+      <input type="search" class="input inv-buscador" placeholder="Buscar insumo..." aria-label="Buscar insumo" />
+      <select class="input inv-orden-select" aria-label="Ordenar por">
+        <option value="nombre">Nombre (A-Z)</option>
+        <option value="stock">Stock</option>
+        <option value="costo">Costo</option>
+      </select>
+      <button type="button" class="btn-accion" data-action="abrir-alta-insumo">
+        <svg class="icon" aria-hidden="true"><use href="#i-mas"/></svg> Agregar
+      </button>
+    </div>
     <div id="inv-insumos" class="inv-list"></div>
-    <button type="button" class="btn-accion" data-toggle="form-insumo">
-      <svg class="icon" aria-hidden="true"><use href="#i-mas"/></svg> Agregar insumo
-    </button>
-    <form id="form-insumo" class="form-alta hidden">
-      ${campo({ label: 'Nombre', input: '<input name="nombre" class="input" placeholder="Ej: Bolsita transparente" required />' })}
-      ${campo({ label: 'Stock inicial', input: '<input name="stock" class="input" type="number" min="0" inputmode="numeric" placeholder="Ej: 100" required />' })}
-      ${campo({ label: 'Costo por unidad en pesos', hint: 'Cuánto te cuesta a vos cada uno (para saber tu ganancia más adelante).', input: '<input name="costo" class="input" type="number" min="0" step="1" inputmode="numeric" value="0" />' })}
-      <button type="submit" class="btn btn--primary">Guardar insumo</button>
-    </form>
   `;
 
+  const CRITERIOS = { stock: (i) => i.stock, costo: (i) => i.costo ?? 0 };
+
+  function actualizarLista() {
+    const filtrados = filtrarPorNombre(insumos, filtro, (i) => i.nombre);
+    const ordenados = ordenar(filtrados, orden, CRITERIOS, (i) => i.nombre);
+    renderListaInsumos(ordenados, insumos.length > 0, container, refrescar, insumos);
+  }
+
+  async function refrescar() {
+    insumos = await fetchInsumos();
+    actualizarLista();
+  }
+
+  container.querySelector('.inv-buscador').addEventListener('input', (e) => {
+    filtro = e.target.value;
+    actualizarLista();
+  });
+  container.querySelector('.inv-orden-select').addEventListener('change', (e) => {
+    orden = e.target.value;
+    actualizarLista();
+  });
+  container.querySelector('[data-action="abrir-alta-insumo"]').addEventListener('click', () => {
+    abrirAltaInsumoModal(refrescar);
+  });
+
+  actualizarLista();
+}
+
+function renderListaInsumos(insumosAMostrar, hayInsumos, container, refrescar, insumos) {
   const list = container.querySelector('#inv-insumos');
-  list.innerHTML = insumos.map((i) => `
+  list.innerHTML = insumosAMostrar.map((i) => `
     <div class="row" data-id="${i.id}">
       <span class="row__nombre">${escapeHtml(i.nombre)}</span>
       <label class="inv-mini-label">Stock <input type="number" class="insumo-stock-input" data-id="${i.id}" value="${i.stock}" min="0" /></label>
       <label class="inv-mini-label">Costo $<input type="number" class="insumo-costo-input" data-id="${i.id}" value="${i.costo ?? 0}" min="0" step="1" /></label>
+      <button class="btn-accion btn-accion--sm" data-action="editar-nombre-insumo" data-id="${i.id}" data-nombre="${escapeHtml(i.nombre)}" title="Cambiar el nombre de este insumo">
+        <svg class="icon" aria-hidden="true"><use href="#i-editar"/></svg> Nombre
+      </button>
       <button class="btn-accion btn-accion--peligro btn-accion--sm" data-action="eliminar-insumo" data-id="${i.id}" title="Eliminar este insumo">
         <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg> Eliminar
       </button>
     </div>
-  `).join('') || '<p class="list-empty">Todavía no hay insumos</p>';
-
-  const toggleBtn = container.querySelector('[data-toggle="form-insumo"]');
-  const form = container.querySelector('#form-insumo');
-  toggleBtn.addEventListener('click', () => {
-    form.classList.toggle('hidden');
-    if (!form.classList.contains('hidden')) form.querySelector('input').focus();
-  });
+  `).join('') || (hayInsumos ? '<p class="list-empty">No se encontraron insumos con ese nombre</p>' : '<p class="list-empty">Todavía no hay insumos</p>');
 
   list.querySelectorAll('.insumo-stock-input').forEach((input) => {
     input.addEventListener('change', async () => {
@@ -52,7 +81,11 @@ export async function renderInsumosSection(container) {
         return;
       }
       const { error } = await mutar(supabase.from('insumos').update({ stock: val }).eq('id', input.dataset.id), 'No se pudo actualizar el stock del insumo');
-      if (!error) input.defaultValue = String(val);
+      if (!error) {
+        input.defaultValue = String(val);
+        const item = insumos.find(i => i.id === input.dataset.id);
+        if (item) item.stock = val;
+      }
     });
   });
 
@@ -65,7 +98,25 @@ export async function renderInsumosSection(container) {
         return;
       }
       const { error } = await mutar(supabase.from('insumos').update({ costo: val }).eq('id', input.dataset.id), 'No se pudo actualizar el costo del insumo');
-      if (!error) input.defaultValue = String(val);
+      if (!error) {
+        input.defaultValue = String(val);
+        const item = insumos.find(i => i.id === input.dataset.id);
+        if (item) item.costo = val;
+      }
+    });
+  });
+
+  list.querySelectorAll('[data-action="editar-nombre-insumo"]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const actual = btn.dataset.nombre;
+      const val = await promptDialog('Nuevo nombre del insumo:', { value: actual, okLabel: 'Guardar' });
+      if (val === null) return; // canceló
+      const nombre = val.trim();
+      if (!nombre) { toast('El nombre no puede quedar vacío.'); return; }
+      if (nombre === actual) return; // sin cambios
+      const { error } = await mutar(supabase.from('insumos').update({ nombre }).eq('id', btn.dataset.id), 'No se pudo cambiar el nombre');
+      if (error) return;
+      refrescar();
     });
   });
 
@@ -75,18 +126,40 @@ export async function renderInsumosSection(container) {
       if (!ok) return;
       const { error } = await mutar(supabase.from('insumos').delete().eq('id', btn.dataset.id), 'No se pudo eliminar el insumo');
       if (error) return;
-      renderInsumosSection(container);
+      refrescar();
     });
   });
+}
 
-  container.querySelector('#form-insumo').addEventListener('submit', async (e) => {
+function abrirAltaInsumoModal(refrescar) {
+  const { dialogo, cerrar } = abrirModal({
+    titulo: 'Agregar insumo',
+    contenidoHTML: `
+      <form id="form-insumo" class="form-alta">
+        ${campo({ label: 'Nombre', input: '<input name="nombre" class="input" placeholder="Ej: Bolsita transparente" required autofocus />' })}
+        ${campo({ label: 'Stock inicial', input: '<input name="stock" class="input" type="number" min="0" inputmode="numeric" placeholder="Ej: 100" required />' })}
+        ${campo({ label: 'Costo por unidad en pesos', hint: 'Cuánto te cuesta a vos cada uno (para saber tu ganancia más adelante).', input: '<input name="costo" class="input" type="number" min="0" step="1" inputmode="numeric" value="0" />' })}
+        <div class="modal-actions">
+          <button type="button" class="btn btn--secondary" data-action="cerrar">Cancelar</button>
+          <button type="submit" class="btn btn--primary">Guardar insumo</button>
+        </div>
+      </form>
+    `,
+  });
+
+  dialogo.addEventListener('click', (e) => {
+    if (e.target.closest('[data-action="cerrar"]')) cerrar(null);
+  });
+
+  dialogo.querySelector('#form-insumo').addEventListener('submit', async (e) => {
     e.preventDefault();
     const f = e.target;
     const submitBtn = f.querySelector('button[type="submit"]');
     submitBtn.disabled = true;
     const { error } = await mutar(supabase.from('insumos').insert({ nombre: f.nombre.value.trim(), stock: Number(f.stock.value), costo: Number(f.costo.value || 0) }), 'No se pudo crear el insumo');
     if (error) { submitBtn.disabled = false; return; }
-    renderInsumosSection(container);
+    cerrar(true);
+    refrescar();
   });
 }
 
