@@ -2,7 +2,10 @@ import { supabase } from './supabaseClient.js';
 import { confirmDialog, toast, mutar, escapeHtml, formatMoney, uuid, promptDialog, abrirModal, campo, cargando, comprimirImagen } from './ui.js';
 import { renderInsumosSection, abrirInsumosProducto } from './insumos.js';
 
+let vista = 'menu'; // 'menu' | 'categorias' | 'combos' | 'productos' | 'insumos' — se resetea al entrar a la pestaña
+
 export function initInventario(feria) {
+  vista = 'menu';
   const container = document.getElementById('tab-inventario');
   container.innerHTML = cargando('Cargando inventario...', { kind: 'lista' });
   render(feria, container);
@@ -34,17 +37,79 @@ function bindFab(container, fabSel, formSel) {
 }
 
 async function render(feria, container) {
-  const [{ data: categorias, error: catError }, { data: combos, error: comboError }] = await Promise.all([
-    supabase.from('categorias_precio').select('*').eq('feria_id', feria.id).order('orden'),
-    supabase.from('combos').select('*').eq('feria_id', feria.id).order('nombre'),
+  if (vista === 'menu') return renderMenu(feria, container);
+  return renderSubvista(feria, container);
+}
+
+// Pantalla principal: 4 filas con conteo liviano (count-only, sin traer el detalle
+// completo solo para mostrar un número) a cada submenú.
+async function renderMenu(feria, container) {
+  const [{ count: nCategorias }, { count: nCombos }, { count: nProductos }, { count: nInsumos }] = await Promise.all([
+    supabase.from('categorias_precio').select('*', { count: 'exact', head: true }).eq('feria_id', feria.id),
+    supabase.from('combos').select('*', { count: 'exact', head: true }).eq('feria_id', feria.id),
+    supabase.from('feria_productos').select('*', { count: 'exact', head: true }).eq('feria_id', feria.id),
+    supabase.from('insumos').select('*', { count: 'exact', head: true }),
   ]);
 
-  if (catError || comboError) {
-    container.innerHTML = '<p class="error">No se pudo cargar el inventario — revisá la conexión</p>';
-    return;
-  }
+  const fila = (vistaId, emoji, titulo, n, singular, plural) => `
+    <button type="button" class="inv-menu__item" data-vista="${vistaId}">
+      <span class="inv-menu__icon" aria-hidden="true">${emoji}</span>
+      <span class="inv-menu__texto">
+        <span class="inv-menu__titulo">${titulo}</span>
+        <span class="inv-menu__conteo">${n === 1 ? `1 ${singular}` : `${n ?? 0} ${plural}`}</span>
+      </span>
+      <svg class="icon inv-menu__chevron" aria-hidden="true"><use href="#i-chevron"/></svg>
+    </button>
+  `;
 
   container.innerHTML = `
+    <div class="inv-menu">
+      ${fila('categorias', '🏷️', 'Categorías de precio', nCategorias, 'categoría', 'categorías')}
+      ${fila('combos', '🎁', 'Combos', nCombos, 'combo', 'combos')}
+      ${fila('productos', '📦', 'Productos', nProductos, 'producto', 'productos')}
+      ${fila('insumos', '🧵', 'Insumos', nInsumos, 'insumo', 'insumos')}
+    </div>
+  `;
+
+  container.querySelectorAll('.inv-menu__item').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      vista = btn.dataset.vista;
+      render(feria, container);
+    });
+  });
+}
+
+// Pantalla de detalle: header local "‹ Inventario" (sticky, no toca el navbar global)
+// + el contenido de la sección elegida, tal cual existía antes de este cambio.
+async function renderSubvista(feria, container) {
+  container.innerHTML = `
+    <div class="inv-subview__header">
+      <button type="button" class="inv-subview__back" data-action="volver-menu">
+        <svg class="icon" aria-hidden="true"><use href="#i-atras"/></svg> Inventario
+      </button>
+    </div>
+    <div class="inv-subview__body"></div>
+  `;
+  container.querySelector('[data-action="volver-menu"]').addEventListener('click', () => {
+    vista = 'menu';
+    render(feria, container);
+  });
+
+  if (vista === 'categorias') return renderCategoriasVista(feria, container);
+  if (vista === 'combos') return renderCombosVista(feria, container);
+  if (vista === 'productos') return renderProductosVista(feria, container);
+  if (vista === 'insumos') return renderInsumosSection(container.querySelector('.inv-subview__body'));
+}
+
+async function renderCategoriasVista(feria, container) {
+  const body = container.querySelector('.inv-subview__body');
+  body.innerHTML = cargando('Cargando categorías...', { kind: 'lista' });
+  const { data: categorias, error } = await supabase.from('categorias_precio').select('*').eq('feria_id', feria.id).order('orden');
+  if (error) {
+    body.innerHTML = '<p class="error">No se pudo cargar — revisá la conexión</p>';
+    return;
+  }
+  body.innerHTML = `
     <section class="card">
       <h2>Categorías de precio</h2>
       <p class="card__hint">Agrupá productos por precio: todos los de una categoría valen lo mismo (ej: "Chico" = $100). Así cambiás un precio en un solo lugar.</p>
@@ -58,7 +123,36 @@ async function render(feria, container) {
         <button type="submit" class="btn btn--primary">Guardar categoría</button>
       </form>
     </section>
+  `;
 
+  bindToggleForm(container, '[data-toggle-categoria]', '#form-categoria');
+  renderCategorias(feria, categorias, container);
+
+  container.querySelector('#form-categoria').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const submitBtn = form.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    const { error: insertError } = await mutar(supabase.from('categorias_precio').insert({
+      feria_id: feria.id,
+      nombre: form.nombre.value.trim(),
+      precio: Number(form.precio.value),
+      orden: categorias.length,
+    }), 'No se pudo crear la categoría');
+    if (insertError) { submitBtn.disabled = false; return; }
+    render(feria, container);
+  });
+}
+
+async function renderCombosVista(feria, container) {
+  const body = container.querySelector('.inv-subview__body');
+  body.innerHTML = cargando('Cargando combos...', { kind: 'lista' });
+  const { data: combos, error } = await supabase.from('combos').select('*').eq('feria_id', feria.id).order('nombre');
+  if (error) {
+    body.innerHTML = '<p class="error">No se pudo cargar — revisá la conexión</p>';
+    return;
+  }
+  body.innerHTML = `
     <section class="card">
       <h2>Combos</h2>
       <p class="card__hint">Un combo vende varios productos juntos a un precio especial (ej: "3 stickers por $250"). Al vender elegís qué productos entran.</p>
@@ -73,7 +167,38 @@ async function render(feria, container) {
         <button type="submit" class="btn btn--primary">Guardar combo</button>
       </form>
     </section>
+  `;
 
+  bindToggleForm(container, '[data-toggle-combo]', '#form-combo');
+  renderCombos(feria, combos, container);
+
+  container.querySelector('#form-combo').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const submitBtn = form.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    const { error: insertError } = await mutar(supabase.from('combos').insert({
+      feria_id: feria.id,
+      nombre: form.nombre.value.trim(),
+      cantidad: Number(form.cantidad.value),
+      precio: Number(form.precio.value),
+    }), 'No se pudo crear el combo');
+    if (insertError) { submitBtn.disabled = false; return; }
+    render(feria, container);
+  });
+}
+
+async function renderProductosVista(feria, container) {
+  const body = container.querySelector('.inv-subview__body');
+  body.innerHTML = cargando('Cargando productos...', { kind: 'lista' });
+
+  const { data: categorias, error: catError } = await supabase.from('categorias_precio').select('*').eq('feria_id', feria.id).order('orden');
+  if (catError) {
+    body.innerHTML = '<p class="error">No se pudo cargar — revisá la conexión</p>';
+    return;
+  }
+
+  body.innerHTML = `
     <section class="card" id="inv-productos-section">
       <h2>Productos</h2>
       <p class="card__hint">Lo que vendés. El stock es compartido entre todas tus ferias; el precio se define por feria.</p>
@@ -89,7 +214,7 @@ async function render(feria, container) {
       <form id="form-producto" class="form-alta hidden">
         ${campo({ label: 'Nombre del producto', input: '<input name="nombre" class="input" placeholder="Ej: Sticker mariposa" required />' })}
         ${campo({ label: 'Descripción (opcional)', hint: 'Ej: medidas. Útil para distinguir productos con el mismo nombre.', input: '<input name="descripcion" class="input" placeholder="Ej: 5x3cm" />' })}
-        ${campo({ label: 'Categoría de precio', hint: 'La mayoría de los productos van en una categoría de precio. Elegí "Sin categoría" solo si este necesita un precio propio (lo ponés después, desde Vender).', input: `
+        ${campo({ label: 'Categoría de precio', hint: 'La mayoría de los productos van en una categoría de precio. Elegí "Sin categoría" solo si este necesita un precio propio (se pone después, acá mismo).', input: `
           <select name="categoria_precio_id" class="input">
             ${categorias.map((c) => `<option value="${c.id}">${escapeHtml(c.nombre)} (${formatMoney(c.precio)})</option>`).join('')}
             <option value="">Sin categoría — precio individual</option>
@@ -99,51 +224,13 @@ async function render(feria, container) {
         <button type="submit" class="btn btn--primary">Guardar producto</button>
       </form>
     </section>
-
-    <section class="card" id="inv-insumos-section"></section>
-
     <button type="button" class="inv-fab" id="inv-fab-producto" aria-label="Ir a agregar producto" title="Ir a agregar producto">
       <svg class="icon" aria-hidden="true"><use href="#i-mas"/></svg>
     </button>
   `;
 
-  bindToggleForm(container, '[data-toggle-categoria]', '#form-categoria');
-  bindToggleForm(container, '[data-toggle-combo]', '#form-combo');
   bindToggleForm(container, '[data-toggle-producto]', '#form-producto');
   bindFab(container, '#inv-fab-producto', '#form-producto');
-
-  renderCategorias(feria, categorias, container);
-  renderCombos(feria, combos, container);
-
-  container.querySelector('#form-categoria').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const form = e.target;
-    const submitBtn = form.querySelector('button[type="submit"]');
-    submitBtn.disabled = true;
-    const { error } = await mutar(supabase.from('categorias_precio').insert({
-      feria_id: feria.id,
-      nombre: form.nombre.value.trim(),
-      precio: Number(form.precio.value),
-      orden: categorias.length,
-    }), 'No se pudo crear la categoría');
-    if (error) { submitBtn.disabled = false; return; }
-    render(feria, container);
-  });
-
-  container.querySelector('#form-combo').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const form = e.target;
-    const submitBtn = form.querySelector('button[type="submit"]');
-    submitBtn.disabled = true;
-    const { error } = await mutar(supabase.from('combos').insert({
-      feria_id: feria.id,
-      nombre: form.nombre.value.trim(),
-      cantidad: Number(form.cantidad.value),
-      precio: Number(form.precio.value),
-    }), 'No se pudo crear el combo');
-    if (error) { submitBtn.disabled = false; return; }
-    render(feria, container);
-  });
 
   const { data: productos } = await supabase
     .from('feria_productos')
@@ -151,8 +238,6 @@ async function render(feria, container) {
     .eq('feria_id', feria.id);
 
   renderProductos(feria, productos || [], categorias, container);
-
-  renderInsumosSection(container.querySelector('#inv-insumos-section'));
 
   container.querySelector('#form-producto').addEventListener('submit', async (e) => {
     e.preventDefault();
