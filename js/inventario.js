@@ -12,30 +12,6 @@ export function initInventario(feria) {
   return () => {};
 }
 
-// Cablea el botón "Agregar..." que muestra/oculta el formulario de alta de una sección.
-function bindToggleForm(container, toggleSel, formSel) {
-  const btn = container.querySelector(toggleSel);
-  const form = container.querySelector(formSel);
-  btn.addEventListener('click', () => {
-    form.classList.toggle('hidden');
-    if (!form.classList.contains('hidden')) form.querySelector('input, select')?.focus();
-  });
-}
-
-// Cablea el FAB que despliega y lleva (scroll + foco) hasta un formulario de alta.
-// Con muchos productos, el botón "Agregar" al final de la lista queda a varios scrolls
-// de distancia; el FAB lo resuelve sin importar dónde esté parada la usuaria.
-function bindFab(container, fabSel, formSel) {
-  const fab = container.querySelector(fabSel);
-  const form = container.querySelector(formSel);
-  fab.addEventListener('click', () => {
-    form.classList.remove('hidden');
-    const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
-    form.scrollIntoView({ behavior, block: 'center' });
-    form.querySelector('input, select')?.focus({ preventScroll: true });
-  });
-}
-
 async function render(feria, container) {
   if (vista === 'menu') return renderMenu(feria, container);
   return renderSubvista(feria, container);
@@ -313,48 +289,110 @@ async function renderProductosVista(feria, container) {
     return;
   }
 
+  const { data: productosData } = await supabase
+    .from('feria_productos')
+    .select('id, categoria_precio_id, precio_override, productos(id, nombre, descripcion, imagen_url, stock, costo)')
+    .eq('feria_id', feria.id);
+  let feriaProductos = productosData || [];
+  let filtro = '';
+  let orden = 'nombre';
+
   body.innerHTML = `
     <section class="card" id="inv-productos-section">
       <h2>Productos</h2>
       <p class="card__hint">Lo que vendés. El stock es compartido entre todas tus ferias; el precio se define por feria.</p>
-      <div id="inv-productos" class="inv-list"></div>
-      <div class="inv-productos-acciones">
-        <button type="button" class="btn-accion" data-toggle-producto>
-          <svg class="icon" aria-hidden="true"><use href="#i-mas"/></svg> Agregar producto
-        </button>
-        <button id="btn-reutilizar" class="btn-accion" type="button" title="Traer a esta feria un producto que ya existe en otra">
-          <svg class="icon" aria-hidden="true"><use href="#i-anular"/></svg> Traer de otra feria
-        </button>
+      <div class="inv-toolbar">
+        <input type="search" class="input inv-buscador" placeholder="Buscar producto..." aria-label="Buscar producto" />
+        <select class="input inv-orden-select" aria-label="Ordenar por">
+          <option value="nombre">Nombre (A-Z)</option>
+          <option value="categoria">Categoría</option>
+          <option value="precio">Precio</option>
+          <option value="stock">Stock</option>
+        </select>
+        <div class="inv-productos-acciones">
+          <button type="button" class="btn-accion" data-action="abrir-alta-producto">
+            <svg class="icon" aria-hidden="true"><use href="#i-mas"/></svg> Agregar
+          </button>
+          <button type="button" class="btn-accion" data-action="abrir-reutilizar" title="Traer a esta feria un producto que ya existe en otra">
+            <svg class="icon" aria-hidden="true"><use href="#i-anular"/></svg> Traer de otra feria
+          </button>
+        </div>
       </div>
-      <form id="form-producto" class="form-alta hidden">
-        ${campo({ label: 'Nombre del producto', input: '<input name="nombre" class="input" placeholder="Ej: Sticker mariposa" required />' })}
+      <div id="inv-productos" class="inv-list"></div>
+    </section>
+  `;
+
+  function actualizarLista() {
+    const filtrados = filtrarPorNombre(feriaProductos, filtro, (fp) => fp.productos.nombre);
+    const CRITERIOS = {
+      precio: (fp) => { const v = precioEfectivo(fp, categorias); return v == null ? Infinity : v; },
+      stock: (fp) => fp.productos.stock,
+    };
+    const aMostrar = orden === 'categoria' ? filtrados : ordenar(filtrados, orden, CRITERIOS, (fp) => fp.productos.nombre);
+    renderProductos(aMostrar, orden, feriaProductos.length > 0, categorias, container, refrescar, feriaProductos);
+  }
+
+  async function refrescar() {
+    const { data: nuevos, error: refrescarError } = await supabase
+      .from('feria_productos')
+      .select('id, categoria_precio_id, precio_override, productos(id, nombre, descripcion, imagen_url, stock, costo)')
+      .eq('feria_id', feria.id);
+    if (refrescarError) {
+      toast('No se pudo actualizar la lista — revisá la conexión', { tipo: 'error' });
+      return;
+    }
+    feriaProductos = nuevos || [];
+    actualizarLista();
+  }
+
+  body.querySelector('.inv-buscador').addEventListener('input', (e) => {
+    filtro = e.target.value;
+    actualizarLista();
+  });
+  body.querySelector('.inv-orden-select').addEventListener('change', (e) => {
+    orden = e.target.value;
+    actualizarLista();
+  });
+  body.querySelector('[data-action="abrir-alta-producto"]').addEventListener('click', () => {
+    abrirAltaProductoModal(feria, categorias, refrescar);
+  });
+  body.querySelector('[data-action="abrir-reutilizar"]').addEventListener('click', () => {
+    abrirReutilizarModal(feria, categorias, refrescar);
+  });
+
+  actualizarLista();
+}
+
+// Modal de alta de producto — reemplaza al viejo formulario inline colapsado + FAB
+// (el botón "Agregar" ahora vive siempre visible en la barra de herramientas de arriba).
+function abrirAltaProductoModal(feria, categorias, refrescar) {
+  const { dialogo, cerrar } = abrirModal({
+    titulo: 'Agregar producto',
+    claseExtra: 'modal--combo',
+    contenidoHTML: `
+      <form id="form-producto" class="form-alta">
+        ${campo({ label: 'Nombre del producto', input: '<input name="nombre" class="input" placeholder="Ej: Sticker mariposa" required autofocus />' })}
         ${campo({ label: 'Descripción (opcional)', hint: 'Ej: medidas. Útil para distinguir productos con el mismo nombre.', input: '<input name="descripcion" class="input" placeholder="Ej: 5x3cm" />' })}
-        ${campo({ label: 'Categoría de precio', hint: 'La mayoría de los productos van en una categoría de precio. Elegí "Sin categoría" solo si este necesita un precio propio (se pone después, acá mismo).', input: `
+        ${campo({ label: 'Categoría de precio', hint: 'La mayoría de los productos van en una categoría de precio. Elegí "Sin categoría" solo si este necesita un precio propio (se pone después, en la lista).', input: `
           <select name="categoria_precio_id" class="input">
             ${categorias.map((c) => `<option value="${c.id}">${escapeHtml(c.nombre)} (${formatMoney(c.precio)})</option>`).join('')}
             <option value="">Sin categoría — precio individual</option>
           </select>` })}
         ${campo({ label: 'Stock inicial', input: '<input name="stock" class="input" type="number" min="0" inputmode="numeric" placeholder="Ej: 20" required />' })}
         ${campo({ label: 'Foto (opcional)', input: '<input name="foto" class="input input--file" type="file" accept="image/*" />' })}
-        <button type="submit" class="btn btn--primary">Guardar producto</button>
+        <div class="modal-actions">
+          <button type="button" class="btn btn--secondary" data-action="cerrar">Cancelar</button>
+          <button type="submit" class="btn btn--primary">Guardar producto</button>
+        </div>
       </form>
-    </section>
-    <button type="button" class="inv-fab" id="inv-fab-producto" aria-label="Ir a agregar producto" title="Ir a agregar producto">
-      <svg class="icon" aria-hidden="true"><use href="#i-mas"/></svg>
-    </button>
-  `;
+    `,
+  });
 
-  bindToggleForm(container, '[data-toggle-producto]', '#form-producto');
-  bindFab(container, '#inv-fab-producto', '#form-producto');
+  dialogo.addEventListener('click', (e) => {
+    if (e.target.closest('[data-action="cerrar"]')) cerrar(null);
+  });
 
-  const { data: productos } = await supabase
-    .from('feria_productos')
-    .select('id, categoria_precio_id, precio_override, productos(id, nombre, descripcion, imagen_url, stock, costo)')
-    .eq('feria_id', feria.id);
-
-  renderProductos(feria, productos || [], categorias, container);
-
-  container.querySelector('#form-producto').addEventListener('submit', async (e) => {
+  dialogo.querySelector('#form-producto').addEventListener('submit', async (e) => {
     e.preventDefault();
     const form = e.target;
     const submitBtn = form.querySelector('button[type="submit"]');
@@ -400,10 +438,9 @@ async function renderProductosVista(feria, container) {
       return;
     }
 
-    render(feria, container);
+    cerrar(true);
+    refrescar();
   });
-
-  container.querySelector('#btn-reutilizar').addEventListener('click', () => abrirReutilizarModal(feria, categorias, container));
 }
 
 function renderCategorias(categoriasAMostrar, hayCategorias, container, refrescar, categorias) {
@@ -550,12 +587,20 @@ function renderCombos(combosAMostrar, hayCombos, container, refrescar, combos) {
   });
 }
 
+// Precio final de un producto en esta feria: precio_override manda si está seteado, si no el
+// de su categoría; null si no tiene ninguno de los dos (queda "Sin precio"). Se reusa tanto acá
+// como criterio de orden por precio en renderProductosVista.
+function precioEfectivo(fp, categorias) {
+  if (fp.precio_override != null) return fp.precio_override;
+  const categoria = categorias.find((c) => c.id === fp.categoria_precio_id);
+  return categoria ? categoria.precio : null;
+}
+
 // Fila de un producto (sin cambios de comportamiento — solo se movió a función aparte
 // para poder agruparla por categoría en renderProductos).
 function filaProducto(fp, categorias) {
   const p = fp.productos;
-  const categoria = categorias.find((c) => c.id === fp.categoria_precio_id);
-  const precio = fp.precio_override != null ? fp.precio_override : (categoria ? categoria.precio : null);
+  const precio = precioEfectivo(fp, categorias);
   const precioBadge = precio != null
     ? `<span class="inv-producto__precio">${formatMoney(precio)}</span>`
     : `<span class="inv-producto__precio inv-producto__precio--sin">Sin precio</span>`;
@@ -601,32 +646,40 @@ function filaProducto(fp, categorias) {
   `;
 }
 
-// Agrupados por categoría de precio (con "Sin categoría" al final) para que la lista se
-// pueda navegar aunque haya muchos productos en muchas categorías — antes era una sola
-// lista plana. Colapsados por default: se ve el panorama (categoría + cuántos productos)
-// y se abre solo la que hace falta. Si queda un único grupo, no tiene sentido colapsarlo.
-function renderProductos(feria, feriaProductos, categorias, container) {
-  const list = container.querySelector('#inv-productos');
-
+// Agrupa por categoría de precio (con "Sin categoría" al final), A-Z dentro de cada grupo.
+// Usado solo cuando el orden elegido es "Categoría" — ya no es un acordeón siempre-on,
+// es un modo de orden más entre otros (ver renderProductos).
+function agruparPorCategoria(feriaProductos, categorias) {
   const grupos = categorias.map((c) => ({
     titulo: `${escapeHtml(c.nombre)} — ${formatMoney(c.precio)}`,
-    productos: feriaProductos.filter((fp) => fp.categoria_precio_id === c.id),
+    productos: [...feriaProductos.filter((fp) => fp.categoria_precio_id === c.id)].sort((a, b) => a.productos.nombre.localeCompare(b.productos.nombre, 'es')),
   }));
-  const sinCategoria = feriaProductos.filter((fp) => !fp.categoria_precio_id);
+  const sinCategoria = [...feriaProductos.filter((fp) => !fp.categoria_precio_id)].sort((a, b) => a.productos.nombre.localeCompare(b.productos.nombre, 'es'));
   if (sinCategoria.length > 0) grupos.push({ titulo: 'Sin categoría — precio individual', productos: sinCategoria });
+  return grupos.filter((g) => g.productos.length > 0);
+}
 
-  const gruposConProductos = grupos.filter((g) => g.productos.length > 0);
-  const abrirSolo = gruposConProductos.length <= 1;
+function renderProductos(feriaProductosAMostrar, orden, hayProductos, categorias, container, refrescar, feriaProductos) {
+  const list = container.querySelector('#inv-productos');
 
-  list.innerHTML = gruposConProductos.map((g) => `
-    <details class="inv-cat-grupo" ${abrirSolo ? 'open' : ''}>
-      <summary>
-        <span class="inv-cat-grupo__titulo">${g.titulo}</span>
-        <span class="inv-cat-grupo__conteo">${g.productos.length === 1 ? '1 producto' : `${g.productos.length} productos`}</span>
-      </summary>
-      <div class="inv-list">${g.productos.map((fp) => filaProducto(fp, categorias)).join('')}</div>
-    </details>
-  `).join('') || '<p class="list-empty">Todavía no hay productos en esta feria</p>';
+  if (feriaProductosAMostrar.length === 0) {
+    list.innerHTML = hayProductos
+      ? '<p class="list-empty">No se encontraron productos con ese nombre</p>'
+      : '<p class="list-empty">Todavía no hay productos en esta feria</p>';
+  } else if (orden === 'categoria') {
+    const grupos = agruparPorCategoria(feriaProductosAMostrar, categorias);
+    list.innerHTML = grupos.map((g) => `
+      <div class="inv-cat-grupo">
+        <p class="inv-cat-grupo__titulo-fijo">
+          <span>${g.titulo}</span>
+          <span class="inv-cat-grupo__conteo">${g.productos.length === 1 ? '1 producto' : `${g.productos.length} productos`}</span>
+        </p>
+        <div class="inv-list">${g.productos.map((fp) => filaProducto(fp, categorias)).join('')}</div>
+      </div>
+    `).join('');
+  } else {
+    list.innerHTML = feriaProductosAMostrar.map((fp) => filaProducto(fp, categorias)).join('');
+  }
 
   list.querySelectorAll('.inv-stock-input').forEach((input) => {
     input.addEventListener('change', async () => {
@@ -637,7 +690,13 @@ function renderProductos(feria, feriaProductos, categorias, container) {
         return;
       }
       const { error } = await mutar(supabase.from('productos').update({ stock: val }).eq('id', input.dataset.productoId), 'No se pudo actualizar el stock');
-      if (!error) input.defaultValue = String(val); // el input ya muestra el valor; no re-render (para no perder foco/scroll)
+      if (!error) {
+        input.defaultValue = String(val); // el input ya muestra el valor; no re-render (para no perder foco/scroll)
+        // El stock es criterio de orden ("Stock"): hay que sincronizar el array en memoria
+        // para que un reorden inmediato después de este cambio no muestre orden viejo.
+        const item = feriaProductos.find((fp) => fp.productos.id === input.dataset.productoId);
+        if (item) item.productos.stock = val;
+      }
     });
   });
 
@@ -668,6 +727,9 @@ function renderProductos(feria, feriaProductos, categorias, container) {
         input.defaultValue = '';
         if (fila) fila.dataset.override = '';
         if (badge) { badge.textContent = 'Sin precio'; badge.classList.add('inv-producto__precio--sin'); }
+        // precio_override es criterio de orden ("Precio"): sincronizar el array en memoria.
+        const item = feriaProductos.find((fp) => fp.id === input.dataset.id);
+        if (item) item.precio_override = null;
         return;
       }
 
@@ -682,6 +744,9 @@ function renderProductos(feria, feriaProductos, categorias, container) {
       input.defaultValue = String(val);
       if (fila) fila.dataset.override = String(val);
       if (badge) { badge.textContent = formatMoney(val); badge.classList.remove('inv-producto__precio--sin'); }
+      // precio_override es criterio de orden ("Precio"): sincronizar el array en memoria.
+      const item = feriaProductos.find((fp) => fp.id === input.dataset.id);
+      if (item) item.precio_override = val;
     });
   });
 
@@ -702,6 +767,9 @@ function renderProductos(feria, feriaProductos, categorias, container) {
       // El campo "Precio individual" sólo tiene sentido en "Sin categoría".
       const precioIndividual = fila?.querySelector('.inv-precio-individual');
       if (precioIndividual) precioIndividual.classList.toggle('hidden', !!select.value);
+      // La categoría es criterio de orden ("Categoría"): sincronizar el array en memoria.
+      const item = feriaProductos.find((fp) => fp.id === select.dataset.id);
+      if (item) item.categoria_precio_id = select.value || null;
     });
   });
 
@@ -717,7 +785,7 @@ function renderProductos(feria, feriaProductos, categorias, container) {
       // actualiza en todas (correcto: es un solo catálogo compartido).
       const { error } = await mutar(supabase.from('productos').update({ nombre }).eq('id', btn.dataset.productoId), 'No se pudo cambiar el nombre');
       if (error) return;
-      render(feria, container);
+      refrescar();
     });
   });
 
@@ -730,7 +798,7 @@ function renderProductos(feria, feriaProductos, categorias, container) {
       if (descripcion === (actual || null)) return; // sin cambios
       const { error } = await mutar(supabase.from('productos').update({ descripcion }).eq('id', btn.dataset.productoId), 'No se pudo cambiar la descripción');
       if (error) return;
-      render(feria, container);
+      refrescar();
     });
   });
 
@@ -745,7 +813,7 @@ function renderProductos(feria, feriaProductos, categorias, container) {
       const ok = await confirmDialog('¿Quitar este producto de esta feria? Sigue existiendo para otras ferias que lo usen.');
       if (!ok) return;
       await supabase.from('feria_productos').delete().eq('id', btn.dataset.id);
-      render(feria, container);
+      refrescar();
     });
   });
 
@@ -754,12 +822,12 @@ function renderProductos(feria, feriaProductos, categorias, container) {
       const ok = await confirmDialog('¿Eliminar este producto por completo, de TODAS las ferias que lo usan? Las ventas ya registradas se conservan.', { peligro: true });
       if (!ok) return;
       await supabase.from('productos').delete().eq('id', btn.dataset.productoId);
-      render(feria, container);
+      refrescar();
     });
   });
 }
 
-async function abrirReutilizarModal(feriaActual, categoriasActuales, container) {
+async function abrirReutilizarModal(feriaActual, categoriasActuales, refrescar) {
   const { data: otrasFerias } = await supabase.from('ferias').select('*').neq('id', feriaActual.id).order('nombre');
   if (!otrasFerias || otrasFerias.length === 0) {
     toast('No hay otra feria de la cual traer productos todavía');
@@ -817,7 +885,7 @@ async function abrirReutilizarModal(feriaActual, categoriasActuales, container) 
       }
       toast('Producto agregado a esta feria', { tipo: 'exito' });
       cerrar(true);
-      render(feriaActual, container);
+      refrescar();
     }
   });
 
