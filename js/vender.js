@@ -15,6 +15,16 @@ let feriaProductosActuales = [];
 let combosActuales = [];
 let sheetAbierta = false;
 let ultimoCountDock = 0;
+let densidadCompacta = false; // preferencia de grilla del dispositivo (no por feria) — ver cargarDensidad/guardarDensidad
+const DENSIDAD_KEY = 'feria:densidad-grid';
+
+function cargarDensidad() {
+  try { return localStorage.getItem(DENSIDAD_KEY) === 'compacta'; } catch { return false; }
+}
+
+function guardarDensidad(compacta) {
+  try { localStorage.setItem(DENSIDAD_KEY, compacta ? 'compacta' : 'normal'); } catch { /* almacenamiento bloqueado o lleno: no persiste, la app sigue andando */ }
+}
 
 export function initVender(feria) {
   carrito = [];
@@ -28,6 +38,7 @@ export function initVender(feria) {
   feriaProductosActuales = [];
   combosActuales = [];
   ultimoCountDock = 0;
+  densidadCompacta = cargarDensidad();
   restaurarCarrito(feria.id); // un refresh en plena feria no pierde el carrito
   resetCarritoUI();
   const container = document.getElementById('tab-vender');
@@ -167,6 +178,9 @@ function renderGrid(feria, feriaProductos, combos, container) {
     const header = document.createElement('div');
     header.className = 'vender-header';
 
+    const fila = document.createElement('div');
+    fila.className = 'vender-header__fila';
+
     const buscador = document.createElement('input');
     buscador.className = 'vender-buscador';
     buscador.type = 'search';
@@ -178,7 +192,25 @@ function renderGrid(feria, feriaProductos, combos, container) {
       const grid = container.querySelector('.productos-grid');
       if (grid) aplicarFiltroBusqueda(grid); // sin re-render: conserva foco y posición del cursor
     });
-    header.appendChild(buscador);
+    fila.appendChild(buscador);
+
+    const densidadBtn = document.createElement('button');
+    densidadBtn.type = 'button';
+    densidadBtn.className = 'vender-densidad-btn';
+    densidadBtn.setAttribute('aria-pressed', String(densidadCompacta));
+    densidadBtn.setAttribute('aria-label', 'Vista compacta de la grilla');
+    densidadBtn.title = 'Vista compacta: ver más productos por fila';
+    densidadBtn.innerHTML = '<svg class="icon" aria-hidden="true"><use href="#i-densidad"/></svg>';
+    densidadBtn.addEventListener('click', () => {
+      densidadCompacta = !densidadCompacta;
+      guardarDensidad(densidadCompacta);
+      const grid = container.querySelector('.productos-grid');
+      if (grid) grid.classList.toggle('productos-grid--compacta', densidadCompacta);
+      densidadBtn.setAttribute('aria-pressed', String(densidadCompacta));
+    });
+    fila.appendChild(densidadBtn);
+
+    header.appendChild(fila);
 
     if (categoriasPresentes.length > 0) {
       const chips = document.createElement('div');
@@ -228,7 +260,7 @@ function renderGrid(feria, feriaProductos, combos, container) {
     return a.productos.nombre.localeCompare(b.productos.nombre, 'es'); // luego alfabético estable
   });
   const grid = document.createElement('div');
-  grid.className = 'productos-grid';
+  grid.className = `productos-grid${densidadCompacta ? ' productos-grid--compacta' : ''}`;
   ordenados.forEach((fp) => {
     const p = fp.productos;
     const precio = precioEfectivo(fp);
