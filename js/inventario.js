@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient.js';
-import { confirmDialog, toast, mutar, escapeHtml, formatMoney, uuid, promptDialog, abrirModal, campo, cargando, comprimirImagen, filtrarPorNombre, ordenar } from './ui.js';
+import { confirmDialog, toast, mutar, escapeHtml, formatMoney, uuid, promptDialog, abrirModal, campo, cargando, comprimirImagen, filtrarPorNombre, ordenar, collatorEs } from './ui.js';
 import { renderInsumosSection, abrirInsumosProducto } from './insumos.js';
 
 let vista = 'menu'; // 'menu' | 'categorias' | 'combos' | 'productos' | 'insumos' — se resetea al entrar a la pestaña
@@ -357,7 +357,7 @@ async function renderProductosVista(feria, container) {
     abrirAltaProductoModal(feria, categorias, refrescar);
   });
   body.querySelector('[data-action="abrir-reutilizar"]').addEventListener('click', () => {
-    abrirReutilizarModal(feria, categorias, refrescar);
+    abrirReutilizarModal(feria, refrescar);
   });
 
   actualizarLista();
@@ -652,9 +652,9 @@ function filaProducto(fp, categorias) {
 function agruparPorCategoria(feriaProductos, categorias) {
   const grupos = categorias.map((c) => ({
     titulo: `${escapeHtml(c.nombre)} — ${formatMoney(c.precio)}`,
-    productos: [...feriaProductos.filter((fp) => fp.categoria_precio_id === c.id)].sort((a, b) => a.productos.nombre.localeCompare(b.productos.nombre, 'es')),
+    productos: [...feriaProductos.filter((fp) => fp.categoria_precio_id === c.id)].sort((a, b) => collatorEs.compare(a.productos.nombre, b.productos.nombre)),
   }));
-  const sinCategoria = [...feriaProductos.filter((fp) => !fp.categoria_precio_id)].sort((a, b) => a.productos.nombre.localeCompare(b.productos.nombre, 'es'));
+  const sinCategoria = [...feriaProductos.filter((fp) => !fp.categoria_precio_id)].sort((a, b) => collatorEs.compare(a.productos.nombre, b.productos.nombre));
   if (sinCategoria.length > 0) grupos.push({ titulo: 'Sin categoría — precio individual', productos: sinCategoria });
   return grupos.filter((g) => g.productos.length > 0);
 }
@@ -754,12 +754,14 @@ function renderProductos(feriaProductosAMostrar, orden, hayProductos, categorias
     select.addEventListener('change', async () => {
       const { error } = await mutar(supabase.from('feria_productos').update({ categoria_precio_id: select.value || null }).eq('id', select.dataset.id), 'No se pudo actualizar la categoría');
       if (error) return;
+      // La categoría es criterio de orden ("Categoría") y de precio: sincronizar el array en memoria
+      // primero para poder reusar precioEfectivo tal cual abajo.
+      const item = feriaProductos.find((fp) => fp.id === select.dataset.id);
+      if (item) item.categoria_precio_id = select.value || null;
       // Actualizar el badge de precio de esta fila en el lugar, sin re-render (respeta un precio_override si lo hay).
       const fila = select.closest('.inv-producto');
       const badge = fila?.querySelector('.inv-producto__precio');
-      const override = fila?.dataset.override;
-      const cat = categorias.find((c) => c.id === select.value);
-      const efectivo = (override != null && override !== '') ? Number(override) : (cat ? cat.precio : null);
+      const efectivo = item ? precioEfectivo(item, categorias) : null;
       if (badge) {
         badge.textContent = efectivo != null ? formatMoney(efectivo) : 'Sin precio';
         badge.classList.toggle('inv-producto__precio--sin', efectivo == null);
@@ -767,9 +769,6 @@ function renderProductos(feriaProductosAMostrar, orden, hayProductos, categorias
       // El campo "Precio individual" sólo tiene sentido en "Sin categoría".
       const precioIndividual = fila?.querySelector('.inv-precio-individual');
       if (precioIndividual) precioIndividual.classList.toggle('hidden', !!select.value);
-      // La categoría es criterio de orden ("Categoría"): sincronizar el array en memoria.
-      const item = feriaProductos.find((fp) => fp.id === select.dataset.id);
-      if (item) item.categoria_precio_id = select.value || null;
     });
   });
 
@@ -827,7 +826,7 @@ function renderProductos(feriaProductosAMostrar, orden, hayProductos, categorias
   });
 }
 
-async function abrirReutilizarModal(feriaActual, categoriasActuales, refrescar) {
+async function abrirReutilizarModal(feriaActual, refrescar) {
   const { data: otrasFerias } = await supabase.from('ferias').select('*').neq('id', feriaActual.id).order('nombre');
   if (!otrasFerias || otrasFerias.length === 0) {
     toast('No hay otra feria de la cual traer productos todavía');

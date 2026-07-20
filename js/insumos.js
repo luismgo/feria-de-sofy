@@ -83,7 +83,9 @@ function renderListaInsumos(insumosAMostrar, hayInsumos, container, refrescar, i
       const { error } = await mutar(supabase.from('insumos').update({ stock: val }).eq('id', input.dataset.id), 'No se pudo actualizar el stock del insumo');
       if (!error) {
         input.defaultValue = String(val);
-        const item = insumos.find(i => i.id === input.dataset.id);
+        // El stock es criterio de orden ("Stock"): hay que sincronizar el array en memoria
+        // para que un reorden inmediato después de este cambio no muestre orden viejo.
+        const item = insumos.find((i) => i.id === input.dataset.id);
         if (item) item.stock = val;
       }
     });
@@ -100,7 +102,9 @@ function renderListaInsumos(insumosAMostrar, hayInsumos, container, refrescar, i
       const { error } = await mutar(supabase.from('insumos').update({ costo: val }).eq('id', input.dataset.id), 'No se pudo actualizar el costo del insumo');
       if (!error) {
         input.defaultValue = String(val);
-        const item = insumos.find(i => i.id === input.dataset.id);
+        // El costo también es criterio de orden ("Costo"): hay que sincronizar el array en memoria
+        // para que un reorden inmediato después de este cambio no muestre orden viejo.
+        const item = insumos.find((i) => i.id === input.dataset.id);
         if (item) item.costo = val;
       }
     });

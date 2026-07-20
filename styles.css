@@ -468,12 +468,11 @@ button:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 /* Con el teclado abierto damos aire ocultando la barra inferior y el dock. */
 #feria-view.teclado-abierto .tabbar,
 #feria-view.teclado-abierto .carrito-dock,
-#feria-view.teclado-abierto .inv-fab,
 #feria-view.teclado-abierto .ideas-fab { display: none !important; }
 
 /* ============ FAB (Inventario / Ideas) ============ */
 
-.inv-fab, .ideas-fab {
+.ideas-fab {
   position: fixed;
   right: 16px;
   bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 8px);
@@ -486,7 +485,7 @@ button:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }
   box-shadow: var(--shadow-2);
   padding: 0;
 }
-.inv-fab .icon, .ideas-fab .icon { width: 26px; height: 26px; stroke-width: 2.2; }
+.ideas-fab .icon { width: 26px; height: 26px; stroke-width: 2.2; }
 
 /* ============ Carrito: mini-dock + hoja ============ */
 
@@ -1168,5 +1167,5 @@ button:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }
   .productos-grid--compacta { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
   /* #feria-view queda centrado en un contenedor de 700px: el FAB debe seguir
      pegado a SU borde derecho, no al del viewport. */
-  .inv-fab, .ideas-fab { right: calc(50vw - 350px + 16px); }
+  .ideas-fab { right: calc(50vw - 350px + 16px); }
 }
