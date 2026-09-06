@@ -1,6 +1,7 @@
 import { supabase } from './supabaseClient.js';
 import { confirmDialog, toast, mutar, escapeHtml, formatMoney, uuid, promptDialog, abrirModal, campo, cargando, comprimirImagen, filtrarPorNombre, ordenar, collatorEs } from './ui.js';
 import { renderInsumosSection, abrirInsumosProducto } from './insumos.js';
+import { borrarCatalogo } from './catalogos.js';
 
 let vista = 'menu'; // 'menu' | 'categorias' | 'combos' | 'productos' | 'insumos' — se resetea al entrar a la pestaña
 
@@ -102,6 +103,9 @@ async function renderCategoriasVista(feria, container) {
         <button type="button" class="btn-accion" data-action="abrir-alta-categoria">
           <svg class="icon" aria-hidden="true"><use href="#i-mas"/></svg> Agregar
         </button>
+        <button type="button" class="btn-accion btn-accion--peligro" data-action="limpiar-categorias">
+          <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg> Limpiar catálogo
+        </button>
       </div>
       <div id="inv-categorias" class="inv-list"></div>
     </section>
@@ -135,6 +139,9 @@ async function renderCategoriasVista(feria, container) {
   });
   body.querySelector('[data-action="abrir-alta-categoria"]').addEventListener('click', () => {
     abrirAltaCategoriaModal(feria, categorias, refrescar);
+  });
+  body.querySelector('[data-action="limpiar-categorias"]').addEventListener('click', () => {
+    limpiarCatalogo(feria, 'categorias', refrescar);
   });
 
   actualizarLista();
@@ -203,6 +210,9 @@ async function renderCombosVista(feria, container) {
         <button type="button" class="btn-accion" data-action="abrir-alta-combo">
           <svg class="icon" aria-hidden="true"><use href="#i-mas"/></svg> Agregar
         </button>
+        <button type="button" class="btn-accion btn-accion--peligro" data-action="limpiar-combos">
+          <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg> Limpiar catálogo
+        </button>
       </div>
       <div id="inv-combos" class="inv-list"></div>
     </section>
@@ -236,6 +246,9 @@ async function renderCombosVista(feria, container) {
   });
   body.querySelector('[data-action="abrir-alta-combo"]').addEventListener('click', () => {
     abrirAltaComboModal(feria, refrescar);
+  });
+  body.querySelector('[data-action="limpiar-combos"]').addEventListener('click', () => {
+    limpiarCatalogo(feria, 'combos', refrescar);
   });
 
   actualizarLista();
@@ -316,6 +329,9 @@ async function renderProductosVista(feria, container) {
           <button type="button" class="btn-accion" data-action="abrir-reutilizar" title="Traer a esta feria un producto que ya existe en otra">
             <svg class="icon" aria-hidden="true"><use href="#i-anular"/></svg> Traer de otra feria
           </button>
+          <button type="button" class="btn-accion btn-accion--peligro" data-action="limpiar-productos">
+            <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg> Limpiar catálogo
+          </button>
         </div>
       </div>
       <div id="inv-productos" class="inv-list"></div>
@@ -359,8 +375,40 @@ async function renderProductosVista(feria, container) {
   body.querySelector('[data-action="abrir-reutilizar"]').addEventListener('click', () => {
     abrirReutilizarModal(feria, refrescar);
   });
+  body.querySelector('[data-action="limpiar-productos"]').addEventListener('click', () => {
+    limpiarCatalogo(feria, 'productos', refrescar);
+  });
 
   actualizarLista();
+}
+
+const MENSAJES_LIMPIEZA = {
+  categorias: {
+    confirmacion: '¿Eliminar todas las categorías de precio de esta feria? Los productos quedan sin categoría. Esta acción no se puede deshacer.',
+    error: 'No se pudieron eliminar las categorías',
+    exito: 'Se eliminaron todas las categorías de precio',
+  },
+  combos: {
+    confirmacion: '¿Eliminar todos los combos de esta feria? Esta acción no se puede deshacer.',
+    error: 'No se pudieron eliminar los combos',
+    exito: 'Se eliminaron todos los combos',
+  },
+  productos: {
+    confirmacion: '¿Quitar todos los productos de esta feria? Los productos y su stock siguen existiendo para otras ferias. Esta acción no se puede deshacer.',
+    error: 'No se pudieron quitar los productos de esta feria',
+    exito: 'Se quitaron todos los productos de esta feria',
+  },
+};
+
+async function limpiarCatalogo(feria, catalogo, refrescar) {
+  const mensaje = MENSAJES_LIMPIEZA[catalogo];
+  const ok = await confirmDialog(mensaje.confirmacion, { peligro: true });
+  if (!ok) return;
+
+  const { error } = await mutar(borrarCatalogo(supabase, catalogo, feria.id), mensaje.error);
+  if (error) return;
+  toast(mensaje.exito, { tipo: 'exito' });
+  refrescar();
 }
 
 // Modal de alta de producto — reemplaza al viejo formulario inline colapsado + FAB
