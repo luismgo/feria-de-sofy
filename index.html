@@ -111,6 +111,20 @@
     </nav>
   </section>
 
+  <div id="update-popup" class="update-popup hidden" role="status" aria-live="polite">
+    <div class="update-popup__info">
+      <span class="update-popup__icon" aria-hidden="true">✨</span>
+      <div>
+        <p class="update-popup__texto">Hay una versión nueva</p>
+        <p class="update-popup__subtexto">Actualizá para recibir las mejoras</p>
+      </div>
+    </div>
+    <div class="update-popup__actions">
+      <button type="button" class="update-popup__btn update-popup__btn--luego" id="btn-update-dismiss">Luego</button>
+      <button type="button" class="update-popup__btn update-popup__btn--actualizar" id="btn-update-reload">Actualizar</button>
+    </div>
+  </div>
+
   <script type="module" src="js/app.js"></script>
 </body>
 </html>

@@ -1138,11 +1138,128 @@ button:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .banner { flex: none; padding: 8px 16px; text-align: center; font-size: var(--fs-subhead); font-weight: 500; }
 .banner--offline { background: var(--warning-bg); color: var(--warning-text); }
 
+/* ============ Popup de actualización PWA ============ */
+
+.update-popup {
+  position: fixed;
+  bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-modal);
+  width: min(calc(100vw - 24px), 420px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-3);
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  transition: bottom 0.2s ease;
+}
+
+body:has(.carrito-dock.has-items) .update-popup {
+  bottom: calc(var(--tabbar-h) + var(--safe-bottom) + var(--dock-h) + 20px);
+}
+
+body:has(#feria-view.teclado-abierto) .update-popup {
+  display: none !important;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .update-popup:not(.hidden) {
+    animation: popup-entra 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  @keyframes popup-entra {
+    from {
+      opacity: 0;
+      transform: translateX(-50%) translateY(16px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+  }
+}
+
+.update-popup__info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.update-popup__icon {
+  font-size: 1.25rem;
+  line-height: 1;
+  flex: none;
+}
+
+.update-popup__texto {
+  font-size: var(--fs-subhead);
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0;
+  line-height: 1.3;
+}
+
+.update-popup__subtexto {
+  font-size: var(--fs-caption);
+  color: var(--ink-2);
+  margin: 2px 0 0;
+  line-height: 1.2;
+}
+
+.update-popup__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.update-popup__btn {
+  font-family: inherit;
+  font-size: var(--fs-footnote);
+  font-weight: 700;
+  border-radius: var(--r-full);
+  padding: 8px 14px;
+  min-height: 36px;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.update-popup__btn--luego {
+  background: var(--surface-2);
+  color: var(--ink-2);
+}
+
+.update-popup__btn--luego:hover {
+  background: var(--border);
+  color: var(--ink);
+}
+
+.update-popup__btn--actualizar {
+  background: var(--accent-strong);
+  color: #fff;
+  box-shadow: var(--shadow-1);
+}
+
+.update-popup__btn--actualizar:active {
+  transform: scale(0.97);
+}
+
+.update-popup__btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* ============ Microinteracciones ============ */
 
 @media (prefers-reduced-motion: no-preference) {
   .btn, .btn-accion, .producto-card, .feria-card, .combo-btn,
-  .segmented__item, .stepper__btn, .chip-categoria {
+  .segmented__item, .stepper__btn, .chip-categoria, .update-popup__btn {
     transition: transform 0.12s ease, background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
   }
   .btn:active:not(:disabled), .btn-accion:active,

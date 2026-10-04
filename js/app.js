@@ -3,6 +3,7 @@ import { initFeriaSelector } from './ferias.js';
 import { initFeriaView } from './nav.js';
 import { initReporteGeneral } from './reporte-general.js';
 import { initConnectionBanner } from './connection.js';
+import { initPwaUpdate } from './pwa-update.js';
 
 function showFeriaSelector() {
   document.getElementById('feria-view').classList.add('hidden');
@@ -18,4 +19,5 @@ document.getElementById('btn-reporte-general').addEventListener('click', () => {
 });
 
 initConnectionBanner();
+initPwaUpdate();
 initAuth(showFeriaSelector);

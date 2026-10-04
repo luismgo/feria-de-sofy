@@ -25,16 +25,18 @@ Sin framework y sin build step, a propósito:
 
 - **Frontend:** HTML + CSS + JavaScript plano con módulos ES nativos (`index.html`, `styles.css`, `js/`). Confetti vía [canvas-confetti](https://github.com/catdad/canvas-confetti) por CDN.
 - **Backend:** [Supabase](https://supabase.com) — Postgres + Realtime + Storage + Auth, accedido con `@supabase/supabase-js` por CDN. Toda la lógica del dinero vive en funciones de Postgres (`sql/`), no en el cliente.
-- **PWA:** `manifest.json` + íconos; se instala a pantalla de inicio y abre standalone.
+- **PWA:** `manifest.json` + `sw.js` (Service Worker nativo con estrategia network-first) + íconos; se instala a pantalla de inicio, abre standalone y avisa con un popup para recargar versiones nuevas al instante.
 - **Hosting:** GitHub Pages, publicado desde `master`. Deploy = `git push`.
 
 ## Estructura
 
 ```
-index.html              Shell de la app: login, selector de feria, tabs
+index.html              Shell de la app: login, selector de feria, tabs, popup de update
 styles.css              Todos los estilos
+sw.js                   Service Worker: caché de app shell y gestión de versiones
 js/
   app.js                Punto de entrada y orquestación
+  pwa-update.js         Ciclo de vida de la PWA, chequeo de updates y recarga
   config.js             URL y publishable key de Supabase (públicas por diseño)
   supabaseClient.js     Cliente compartido
   auth.js               Login con link mágico
