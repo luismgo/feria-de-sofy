@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient.js';
-import { toast, escapeHtml, formatMoney, promptDialog, uuid, confirmDialog, abrirModal, cargando, emptyState, vibrar } from './ui.js';
+import { toast, escapeHtml, formatMoney, promptDialog, uuid, confirmDialog, abrirModal, cargando, emptyState, vibrar, collatorEs } from './ui.js';
 import { isOnline } from './connection.js';
 
 let realtimeChannel = null;
@@ -118,7 +118,7 @@ async function loadAndRender(feria, container, { refrescarCarrito = true } = {})
   }
 
   feriaProductosActuales = feriaProductos || [];
-  combosActuales = combos || [];
+  combosActuales = (combos || []).sort((a, b) => collatorEs.compare(a.nombre, b.nombre));
   if (refrescarCarrito) clampCarritoContraStock(feria.id);
   renderGrid(feria, feriaProductosActuales, combosActuales, container);
   if (refrescarCarrito) renderCarrito(feria, container);
@@ -257,7 +257,7 @@ function renderGrid(feria, feriaProductos, combos, container) {
     const rankA = ra === -1 ? Infinity : ra;
     const rankB = rb === -1 ? Infinity : rb;
     if (rankA !== rankB) return rankA - rankB;               // más vendidos primero (congelado)
-    return a.productos.nombre.localeCompare(b.productos.nombre, 'es'); // luego alfabético estable
+    return collatorEs.compare(a.productos.nombre, b.productos.nombre); // luego alfabético natural estable
   });
   const grid = document.createElement('div');
   grid.className = `productos-grid${densidadCompacta ? ' productos-grid--compacta' : ''}`;

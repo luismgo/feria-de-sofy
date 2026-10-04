@@ -264,7 +264,7 @@ export function filtrarPorNombre(items, query, getNombre) {
   return items.filter((item) => getNombre(item).toLowerCase().includes(q));
 }
 
-export const collatorEs = new Intl.Collator('es');
+export const collatorEs = new Intl.Collator('es', { numeric: true });
 
 // Ordena por el criterio elegido en un <select> de orden. `criterios` mapea el value del
 // select a una función que extrae el valor numérico a comparar; un criterio sin entrada en
